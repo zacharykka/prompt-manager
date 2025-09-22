@@ -7,6 +7,7 @@ server:
   readTimeout: 10s
   writeTimeout: 10s
   shutdownTimeout: 10s
+  maxRequestBody: 3145728 # Byte
 database:
   driver: sqlite
   dsn: file:./data/dev.db?cache=shared&_fk=1
