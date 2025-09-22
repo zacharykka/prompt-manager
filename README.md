@@ -96,7 +96,17 @@
 
 ## 当前可用 API
 - `GET /healthz`：返回服务状态、环境信息以及数据库/Redis 的健康详情。
+- `POST /api/v1/auth/register`：注册租户内用户，要求 `tenant_id`、`email`、`password`、`role`（可选）。
+- `POST /api/v1/auth/login`：使用 `tenant_id + email + password` 登录，返回访问令牌与刷新令牌。
+- `POST /api/v1/auth/refresh`：提供刷新令牌换取新的访问/刷新令牌。
 - 其余业务 API 将在后续里程碑逐步实现。
+
+### 认证流程说明
+1. **注册**：管理员调用 `/api/v1/auth/register` 创建用户，密码会以 bcrypt 哈希存储。
+2. **登录**：用户凭凭证调用 `/api/v1/auth/login`，获得 `access_token` 与 `refresh_token`。
+3. **访问受保护资源**：将 `Authorization: Bearer <access_token>` 加入请求头，`AuthGuard` 中间件会校验令牌并在上下文注入 `tenant_id`、`user_id`、`user_role`。
+4. **刷新令牌**：在访问令牌即将过期时，调用 `/api/v1/auth/refresh` 补发新的令牌。
+5. **统一错误格式**：所有认证相关接口返回 `code`、`message`、`details`，便于前端统一处理。
 
 ## 多租户设计
 - **隔离策略**：共享 Schema，在所有业务表引入 `tenant_id`（联合唯一索引确保租户内唯一性）。
