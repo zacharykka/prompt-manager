@@ -17,3 +17,9 @@ test:
 
 run:
 	go run ./cmd/server --config-dir=./config
+
+docker-build:
+	docker build -t prompt-manager-app:latest .
+
+migrate:
+	migrate -path db/migrations -database "sqlite3://$(PWD)/data/dev.db" up
