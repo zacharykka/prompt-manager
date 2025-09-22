@@ -44,7 +44,10 @@ func NewEngine(cfg *config.Config, logger *zap.Logger, opts RouterOptions) *gin.
 	engine := gin.New()
 
 	engine.Use(gin.Recovery())
-	engine.MaxMultipartMemory = 8 << 20
+	if cfg.Server.MaxRequestBody > 0 {
+		engine.MaxMultipartMemory = cfg.Server.MaxRequestBody
+		engine.Use(middleware.LimitRequestBody(cfg.Server.MaxRequestBody))
+	}
 	corsConfig := cors.Config{
 		AllowOrigins:  []string{"*"},
 		AllowMethods:  []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},

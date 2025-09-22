@@ -42,6 +42,7 @@ type ServerConfig struct {
 	ReadTimeout     time.Duration `mapstructure:"readTimeout"`
 	WriteTimeout    time.Duration `mapstructure:"writeTimeout"`
 	ShutdownTimeout time.Duration `mapstructure:"shutdownTimeout"`
+	MaxRequestBody  int64         `mapstructure:"maxRequestBody"`
 }
 
 // DatabaseConfig 定义数据库连接选项，兼容 SQLite 与 PostgreSQL。
@@ -159,6 +160,9 @@ func applyDefaults(cfg *Config, env string) {
 	}
 	if cfg.Server.ShutdownTimeout == 0 {
 		cfg.Server.ShutdownTimeout = 10 * time.Second
+	}
+	if cfg.Server.MaxRequestBody <= 0 {
+		cfg.Server.MaxRequestBody = 3 * 1024 * 1024
 	}
 	if cfg.Database.Driver == "" {
 		cfg.Database.Driver = "sqlite"

@@ -73,7 +73,6 @@ func main() {
 
 	engine := httpserver.NewEngine(cfg, log, httpserver.RouterOptions{
 		Middlewares: []gin.HandlerFunc{
-			middleware.LimitRequestBody(1 << 20),
 			middleware.RequestLogger(log),
 		},
 		HealthDeps: &httpserver.HealthDependencies{
