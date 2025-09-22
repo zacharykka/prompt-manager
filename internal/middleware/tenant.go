@@ -17,6 +17,13 @@ const (
 // TenantInjector 提供基础的租户注入逻辑，后续可替换为 JWT/OIDC 解析。
 func TenantInjector() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
+		if tenantID, exists := ctx.Get(TenantContextKey); exists {
+			if idStr, ok := tenantID.(string); ok && idStr != "" {
+				ctx.Writer.Header().Set(tenantHeader, idStr)
+				ctx.Next()
+				return
+			}
+		}
 		tenantID := ctx.GetHeader(tenantHeader)
 		if tenantID == "" {
 			tenantID = defaultTenant

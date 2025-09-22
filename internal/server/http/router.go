@@ -23,6 +23,7 @@ type RouterOptions struct {
 	Middlewares   []gin.HandlerFunc
 	HealthHandler gin.HandlerFunc
 	HealthDeps    *HealthDependencies
+	AuthHandler   *AuthHandler
 }
 
 // NewEngine 根据环境配置初始化 Gin 引擎，并注册基础路由。
@@ -49,6 +50,12 @@ func NewEngine(cfg *config.Config, logger *zap.Logger, opts RouterOptions) *gin.
 	}
 
 	engine.GET("/healthz", healthHandler)
+
+	if opts.AuthHandler != nil {
+		api := engine.Group("/api/v1")
+		authGroup := api.Group("/auth")
+		opts.AuthHandler.RegisterRoutes(authGroup)
+	}
 
 	logger.Info("http router ready", zap.String("env", cfg.App.Env))
 
