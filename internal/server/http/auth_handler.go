@@ -26,18 +26,18 @@ func (h *AuthHandler) RegisterRoutes(rg *gin.RouterGroup) {
 }
 
 type registerRequest struct {
-	Email    string `json:"email" binding:"required"`
-	Password string `json:"password" binding:"required,min=6"`
-	Role     string `json:"role"`
+    Email    string `json:"email" binding:"required,email,max=255"`
+    Password string `json:"password" binding:"required,min=8,max=128"`
+    Role     string `json:"role" binding:"omitempty,oneof=admin editor viewer"`
 }
 
 type loginRequest struct {
-	Email    string `json:"email" binding:"required"`
-	Password string `json:"password" binding:"required"`
+    Email    string `json:"email" binding:"required,email,max=255"`
+    Password string `json:"password" binding:"required,min=8,max=128"`
 }
 
 type refreshRequest struct {
-	RefreshToken string `json:"refresh_token" binding:"required"`
+    RefreshToken string `json:"refresh_token" binding:"required"`
 }
 
 // Register 创建用户。

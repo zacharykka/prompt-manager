@@ -10,6 +10,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/spf13/pflag"
+	"github.com/ulule/limiter/v3"
+	memorystore "github.com/ulule/limiter/v3/drivers/store/memory"
 	"github.com/zacharykka/prompt-manager/internal/app"
 	"github.com/zacharykka/prompt-manager/internal/config"
 	"github.com/zacharykka/prompt-manager/internal/infra"
@@ -65,16 +67,23 @@ func main() {
 	promptService := prompt.NewService(infraContainer.Repos)
 	promptHandler := httpserver.NewPromptHandler(promptService)
 
+	store := memorystore.NewStore()
+	generalLimiter := middleware.RateLimit(limiter.New(store, limiter.Rate{Period: time.Minute, Limit: 120}), middleware.KeyByClientIP())
+	loginLimiter := middleware.RateLimit(limiter.New(store, limiter.Rate{Period: time.Minute, Limit: 10}), middleware.KeyByClientIP())
+
 	engine := httpserver.NewEngine(cfg, log, httpserver.RouterOptions{
 		Middlewares: []gin.HandlerFunc{
+			middleware.LimitRequestBody(1 << 20),
 			middleware.RequestLogger(log),
 		},
 		HealthDeps: &httpserver.HealthDependencies{
 			DB:    infraContainer.DB,
 			Redis: infraContainer.Redis,
 		},
-		AuthHandler:   authHandler,
-		PromptHandler: promptHandler,
+		AuthHandler:    authHandler,
+		PromptHandler:  promptHandler,
+		RateLimiter:    generalLimiter,
+		LoginRateLimit: loginLimiter,
 	})
 
 	application := app.New(cfg, log, engine)

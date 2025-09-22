@@ -32,17 +32,17 @@ func (h *PromptHandler) RegisterRoutes(rg *gin.RouterGroup) {
 }
 
 type createPromptRequest struct {
-	Name        string   `json:"name" binding:"required"`
-	Description *string  `json:"description"`
-	Tags        []string `json:"tags"`
+    Name        string   `json:"name" binding:"required,min=1,max=128"`
+    Description *string  `json:"description"`
+    Tags        []string `json:"tags" binding:"max=10"`
 }
 
 type createPromptVersionRequest struct {
-	Body            string      `json:"body" binding:"required"`
-	VariablesSchema interface{} `json:"variables_schema"`
-	Metadata        interface{} `json:"metadata"`
-	Status          string      `json:"status"`
-	Activate        bool        `json:"activate"`
+    Body            string      `json:"body" binding:"required,min=1"`
+    VariablesSchema interface{} `json:"variables_schema"`
+    Metadata        interface{} `json:"metadata"`
+    Status          string      `json:"status" binding:"omitempty,oneof=draft published archived"`
+    Activate        bool        `json:"activate"`
 }
 
 // CreatePrompt 处理创建 Prompt 请求。
