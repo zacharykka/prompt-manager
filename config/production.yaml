@@ -1,0 +1,15 @@
+app:
+  env: production
+server:
+  port: 8080
+database:
+  driver: postgres
+  dsn: postgres://prompt_manager:prompt_manager@postgres:5432/prompt_manager?sslmode=disable
+  maxOpen: 50
+  maxIdle: 25
+  connMaxLifetime: 900s
+redis:
+  addr: redis:6379
+  poolSize: 50
+logging:
+  level: warn

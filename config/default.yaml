@@ -1,0 +1,29 @@
+app:
+  name: prompt-manager
+  env: development
+server:
+  host: 0.0.0.0
+  port: 8080
+  readTimeout: 10s
+  writeTimeout: 10s
+  shutdownTimeout: 10s
+database:
+  driver: sqlite
+  dsn: file:./data/dev.db?cache=shared&_fk=1
+  maxOpen: 10
+  maxIdle: 5
+  connMaxLifetime: 300s
+redis:
+  addr: 127.0.0.1:6379
+  username: ""
+  password: ""
+  db: 0
+  poolSize: 10
+auth:
+  accessTokenSecret: change-me
+  refreshTokenSecret: change-me-too
+  accessTokenTTL: 15m
+  refreshTokenTTL: 720h
+  apiKeyHashSecret: change-me-api
+logging:
+  level: info

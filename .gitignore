@@ -1,0 +1,19 @@
+# Binaries
+bin/
+
+# Build cache
+.cache/
+.config/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+
+# Data
+/data/
+
+# Go modules
+vendor/
