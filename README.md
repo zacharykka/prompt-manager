@@ -111,9 +111,10 @@
 ### 认证流程说明
 1. **注册**：管理员调用 `/api/v1/auth/register` 创建用户，密码以 bcrypt 哈希存储。
 2. **登录**：用户凭凭证调用 `/api/v1/auth/login`，获得 `access_token` 与 `refresh_token`。
-3. **访问受保护资源**：将 `Authorization: Bearer <access_token>` 加入请求头，`AuthGuard` 中间件校验令牌并在上下文注入 `user_id` 与 `user_role`。
-4. **刷新令牌**：在访问令牌即将过期时，调用 `/api/v1/auth/refresh` 补发新的令牌。
-5. **统一错误格式**：所有认证相关接口返回 `code`、`message`、`details`，便于前端统一处理。
+3. **访问受保护资源**：将 `Authorization: Bearer <access_token>` 加入请求头，`AuthGuard` 校验令牌并在上下文注入 `user_id`、`user_role`。
+4. **权限**：写操作（创建/更新 Prompt、激活版本）需要 `admin` 或 `editor` 角色，查看操作允许任意登录用户。
+5. **刷新令牌**：在访问令牌即将过期时，调用 `/api/v1/auth/refresh` 补发新的令牌。
+6. **统一错误格式**：所有认证相关接口返回 `code`、`message`、`details`，便于前端统一处理。
 
 ## 认证策略（推荐方案）
 1. **自托管用户名/密码 + JWT/Refresh Token**

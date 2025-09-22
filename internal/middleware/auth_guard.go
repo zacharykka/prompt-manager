@@ -16,6 +16,13 @@ const (
 	UserRoleContextKey = "user_role"
 )
 
+// Roles 定义可用角色名称。
+const (
+	RoleAdmin  = "admin"
+	RoleEditor = "editor"
+	RoleViewer = "viewer"
+)
+
 // AuthGuard 校验 Bearer Token 并注入用户/租户信息。
 func AuthGuard(accessSecret string) gin.HandlerFunc {
 	return func(ctx *gin.Context) {
@@ -39,6 +46,24 @@ func AuthGuard(accessSecret string) gin.HandlerFunc {
 		ctx.Set(UserContextKey, claims.UserID)
 		ctx.Set(UserRoleContextKey, claims.Role)
 		ctx.Set("auth_claims", claims)
+		ctx.Next()
+	}
+}
+
+// RequireRoles 验证当前用户是否具备指定角色之一。
+func RequireRoles(roles ...string) gin.HandlerFunc {
+	allowed := make(map[string]struct{}, len(roles))
+	for _, role := range roles {
+		allowed[strings.ToLower(role)] = struct{}{}
+	}
+
+	return func(ctx *gin.Context) {
+		role := strings.ToLower(ctx.GetString(UserRoleContextKey))
+		if _, ok := allowed[role]; !ok {
+			httpx.RespondError(ctx, http.StatusForbidden, "FORBIDDEN", "当前角色无权限执行该操作", nil)
+			ctx.Abort()
+			return
+		}
 		ctx.Next()
 	}
 }

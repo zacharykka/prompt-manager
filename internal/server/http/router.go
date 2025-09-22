@@ -9,6 +9,7 @@ import (
 	"github.com/zacharykka/prompt-manager/internal/config"
 	"github.com/zacharykka/prompt-manager/internal/infra/cache"
 	"github.com/zacharykka/prompt-manager/internal/infra/database"
+	"github.com/zacharykka/prompt-manager/internal/middleware"
 	"go.uber.org/zap"
 )
 
@@ -59,7 +60,19 @@ func NewEngine(cfg *config.Config, logger *zap.Logger, opts RouterOptions) *gin.
 	}
 	if opts.PromptHandler != nil {
 		promptGroup := api.Group("/prompts")
-		opts.PromptHandler.RegisterRoutes(promptGroup)
+		promptGroup.Use(middleware.AuthGuard(cfg.Auth.AccessTokenSecret))
+
+		// Read-only endpoints available to all authenticated roles
+		promptGroup.GET("/", opts.PromptHandler.ListPrompts)
+		promptGroup.GET("/:id", opts.PromptHandler.GetPrompt)
+		promptGroup.GET("/:id/versions", opts.PromptHandler.ListPromptVersions)
+
+		// Write endpoints restricted to admin/editor
+		writeGroup := promptGroup.Group("")
+		writeGroup.Use(middleware.RequireRoles(middleware.RoleAdmin, middleware.RoleEditor))
+		writeGroup.POST("/", opts.PromptHandler.CreatePrompt)
+		writeGroup.POST("/:id/versions", opts.PromptHandler.CreatePromptVersion)
+		writeGroup.POST("/:id/versions/:versionId/activate", opts.PromptHandler.SetActiveVersion)
 	}
 
 	logger.Info("http router ready", zap.String("env", cfg.App.Env))

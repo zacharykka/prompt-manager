@@ -50,6 +50,7 @@ func TestPromptHandler_CreateAndList(t *testing.T) {
 	router := gin.New()
 	router.Use(func(ctx *gin.Context) {
 		ctx.Set(middleware.UserContextKey, "tester")
+		ctx.Set(middleware.UserRoleContextKey, middleware.RoleAdmin)
 		ctx.Next()
 	})
 	handler.RegisterRoutes(router.Group("/prompts"))
@@ -89,6 +90,7 @@ func TestPromptHandler_CreateVersion(t *testing.T) {
 	router := gin.New()
 	router.Use(func(ctx *gin.Context) {
 		ctx.Set(middleware.UserContextKey, "tester")
+		ctx.Set(middleware.UserRoleContextKey, middleware.RoleAdmin)
 		ctx.Next()
 	})
 	handler.RegisterRoutes(router.Group("/prompts"))
