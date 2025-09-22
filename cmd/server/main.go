@@ -16,6 +16,7 @@ import (
 	"github.com/zacharykka/prompt-manager/internal/middleware"
 	httpserver "github.com/zacharykka/prompt-manager/internal/server/http"
 	"github.com/zacharykka/prompt-manager/internal/service/auth"
+	"github.com/zacharykka/prompt-manager/internal/service/prompt"
 	"github.com/zacharykka/prompt-manager/pkg/logger"
 	"go.uber.org/zap"
 )
@@ -61,6 +62,8 @@ func main() {
 
 	authService := auth.NewService(infraContainer.Repos, cfg.Auth)
 	authHandler := httpserver.NewAuthHandler(authService)
+	promptService := prompt.NewService(infraContainer.Repos)
+	promptHandler := httpserver.NewPromptHandler(promptService)
 
 	engine := httpserver.NewEngine(cfg, log, httpserver.RouterOptions{
 		Middlewares: []gin.HandlerFunc{
@@ -70,7 +73,8 @@ func main() {
 			DB:    infraContainer.DB,
 			Redis: infraContainer.Redis,
 		},
-		AuthHandler: authHandler,
+		AuthHandler:   authHandler,
+		PromptHandler: promptHandler,
 	})
 
 	application := app.New(cfg, log, engine)

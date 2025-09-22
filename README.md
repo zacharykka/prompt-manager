@@ -100,6 +100,12 @@
 - `POST /api/v1/auth/register`：注册用户，字段 `email`、`password`、`role`（可选）。
 - `POST /api/v1/auth/login`：使用 `email + password` 登录，返回访问令牌与刷新令牌。
 - `POST /api/v1/auth/refresh`：提供刷新令牌换取新的访问/刷新令牌。
+- `POST /api/v1/prompts`：创建 Prompt（可包含标签、描述）。
+- `GET /api/v1/prompts`：分页查询 Prompt 列表。
+- `GET /api/v1/prompts/{id}`：获取指定 Prompt 详情。
+- `POST /api/v1/prompts/{id}/versions`：新增 Prompt 版本并可选设为激活。
+- `GET /api/v1/prompts/{id}/versions`：查看 Prompt 版本列表。
+- `POST /api/v1/prompts/{id}/versions/{versionId}/activate`：切换当前启用版本。
 - 其余业务 API 将在后续里程碑逐步实现。
 
 ### 认证流程说明

@@ -1,0 +1,135 @@
+package http
+
+import (
+	"bytes"
+	"database/sql"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"testing"
+
+	"github.com/gin-gonic/gin"
+	"github.com/zacharykka/prompt-manager/internal/infra/database"
+	"github.com/zacharykka/prompt-manager/internal/infra/repository"
+	"github.com/zacharykka/prompt-manager/internal/middleware"
+	promptsvc "github.com/zacharykka/prompt-manager/internal/service/prompt"
+)
+
+func setupPromptHandler(t *testing.T) (*PromptHandler, func()) {
+	t.Helper()
+	dsn := "file:prompt_handler_test.db?mode=memory&cache=shared&_fk=1"
+	db, err := sql.Open("sqlite", dsn)
+	if err != nil {
+		t.Fatalf("open sqlite: %v", err)
+	}
+
+	migrationPath := filepath.Join("..", "..", "..", "db", "migrations", "000001_init.up.sql")
+	migrationSQL, err := os.ReadFile(migrationPath)
+	if err != nil {
+		t.Fatalf("read migration: %v", err)
+	}
+	if _, err := db.Exec(string(migrationSQL)); err != nil {
+		t.Fatalf("exec migration: %v", err)
+	}
+
+	repos := repository.NewSQLRepositories(db, database.NewDialect("sqlite"))
+	service := promptsvc.NewService(repos)
+	handler := NewPromptHandler(service)
+
+	cleanup := func() { _ = db.Close() }
+	return handler, cleanup
+}
+
+func TestPromptHandler_CreateAndList(t *testing.T) {
+	handler, cleanup := setupPromptHandler(t)
+	defer cleanup()
+
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	router.Use(func(ctx *gin.Context) {
+		ctx.Set(middleware.UserContextKey, "tester")
+		ctx.Next()
+	})
+	handler.RegisterRoutes(router.Group("/prompts"))
+
+	payload := map[string]interface{}{
+		"name": "Greeting",
+		"tags": []string{"demo"},
+	}
+	body, _ := json.Marshal(payload)
+
+	req := httptest.NewRequest(http.MethodPost, "/prompts/", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 got %d, body=%s", rec.Code, rec.Body.String())
+	}
+
+	// list prompts
+	listReq := httptest.NewRequest(http.MethodGet, "/prompts/", nil)
+	listRec := httptest.NewRecorder()
+
+	router.ServeHTTP(listRec, listReq)
+
+	if listRec.Code != http.StatusOK {
+		t.Fatalf("expected 200 got %d", listRec.Code)
+	}
+}
+
+func TestPromptHandler_CreateVersion(t *testing.T) {
+	handler, cleanup := setupPromptHandler(t)
+	defer cleanup()
+
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	router.Use(func(ctx *gin.Context) {
+		ctx.Set(middleware.UserContextKey, "tester")
+		ctx.Next()
+	})
+	handler.RegisterRoutes(router.Group("/prompts"))
+
+	// create prompt first
+	createPayload := map[string]interface{}{"name": "Welcome"}
+	createBody, _ := json.Marshal(createPayload)
+	req := httptest.NewRequest(http.MethodPost, "/prompts/", bytes.NewReader(createBody))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("create prompt failed: status=%d body=%s", rec.Code, rec.Body.String())
+	}
+
+	var resp struct {
+		Data struct {
+			Prompt struct {
+				ID string `json:"id"`
+			} `json:"prompt"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal response: %v", err)
+	}
+	if resp.Data.Prompt.ID == "" {
+		t.Fatalf("expected prompt id in response body=%s", rec.Body.String())
+	}
+
+	versionPayload := map[string]interface{}{
+		"body":     "Hello",
+		"activate": true,
+	}
+	versionBody, _ := json.Marshal(versionPayload)
+	versionReq := httptest.NewRequest(http.MethodPost, "/prompts/"+resp.Data.Prompt.ID+"/versions", bytes.NewReader(versionBody))
+	versionReq.Header.Set("Content-Type", "application/json")
+	versionRec := httptest.NewRecorder()
+
+	router.ServeHTTP(versionRec, versionReq)
+
+	if versionRec.Code != http.StatusOK {
+		t.Fatalf("expected 200 got %d body=%s", versionRec.Code, versionRec.Body.String())
+	}
+}
