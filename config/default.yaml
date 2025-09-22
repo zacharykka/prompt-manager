@@ -20,10 +20,10 @@ redis:
   db: 0
   poolSize: 10
 auth:
-  accessTokenSecret: change-me
-  refreshTokenSecret: change-me-too
+  accessTokenSecret: ""
+  refreshTokenSecret: ""
   accessTokenTTL: 15m
   refreshTokenTTL: 720h
-  apiKeyHashSecret: change-me-api
+  apiKeyHashSecret: ""
 logging:
   level: info

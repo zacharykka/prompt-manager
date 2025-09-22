@@ -3,6 +3,8 @@ package infra
 import (
 	"context"
 	"database/sql"
+	"os"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
@@ -11,6 +13,7 @@ import (
 	"github.com/zacharykka/prompt-manager/internal/infra/cache"
 	"github.com/zacharykka/prompt-manager/internal/infra/database"
 	"github.com/zacharykka/prompt-manager/internal/infra/repository"
+	"github.com/zacharykka/prompt-manager/internal/middleware"
 	authutil "github.com/zacharykka/prompt-manager/pkg/auth"
 	"go.uber.org/multierr"
 	"go.uber.org/zap"
@@ -68,32 +71,42 @@ func Initialize(ctx context.Context, cfg *config.Config, logger *zap.Logger) (*C
 }
 
 func ensureDefaultAdmin(ctx context.Context, repos *domain.Repositories, logger *zap.Logger) error {
-	const defaultEmail = "admin"
-	const defaultPassword = "admin123"
+	email := strings.ToLower(strings.TrimSpace(os.Getenv("PROMPT_MANAGER_INIT_ADMIN_EMAIL")))
+	password := os.Getenv("PROMPT_MANAGER_INIT_ADMIN_PASSWORD")
+	role := strings.ToLower(strings.TrimSpace(os.Getenv("PROMPT_MANAGER_INIT_ADMIN_ROLE")))
 
-	if _, err := repos.Users.GetByEmail(ctx, defaultEmail); err == nil {
-		logger.Info("default admin already exists", zap.String("email", defaultEmail))
+	if email == "" || password == "" {
+		logger.Info("admin seeding skipped; PROMPT_MANAGER_INIT_ADMIN_EMAIL or PASSWORD not set")
+		return nil
+	}
+
+	if _, err := repos.Users.GetByEmail(ctx, email); err == nil {
+		logger.Info("seed admin exists", zap.String("email", email))
 		return nil
 	} else if err != domain.ErrNotFound {
 		return err
 	}
 
-	hash, err := authutil.HashPassword(defaultPassword)
+	if role == "" {
+		role = middleware.RoleAdmin
+	}
+
+	hash, err := authutil.HashPassword(password)
 	if err != nil {
 		return err
 	}
 
 	admin := &domain.User{
 		ID:             uuid.NewString(),
-		Email:          defaultEmail,
+		Email:          email,
 		HashedPassword: hash,
-		Role:           "admin",
+		Role:           role,
 		Status:         "active",
 	}
 	if err := repos.Users.Create(ctx, admin); err != nil {
 		return err
 	}
 
-	logger.Info("default admin created", zap.String("email", defaultEmail))
+	logger.Info("seed admin created", zap.String("email", email))
 	return nil
 }

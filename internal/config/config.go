@@ -119,6 +119,10 @@ func Load(configDir string, env string) (*Config, error) {
 
 	applyDefaults(&cfg, chosenEnv)
 
+	if err := validateConfig(&cfg); err != nil {
+		return nil, err
+	}
+
 	return &cfg, nil
 }
 
@@ -177,6 +181,30 @@ func applyDefaults(cfg *Config, env string) {
 	if cfg.Logging.Level == "" {
 		cfg.Logging.Level = "info"
 	}
+}
+
+func validateConfig(cfg *Config) error {
+	if err := validateSecret("auth.accessTokenSecret", cfg.Auth.AccessTokenSecret); err != nil {
+		return err
+	}
+	if err := validateSecret("auth.refreshTokenSecret", cfg.Auth.RefreshTokenSecret); err != nil {
+		return err
+	}
+	if err := validateSecret("auth.apiKeyHashSecret", cfg.Auth.APIKeyHashSecret); err != nil {
+		return err
+	}
+	return nil
+}
+
+func validateSecret(field, secret string) error {
+	clean := strings.TrimSpace(secret)
+	if len(clean) < 32 {
+		return fmt.Errorf("config %s must be at least 32 characters", field)
+	}
+	if strings.Contains(strings.ToLower(clean), "change-me") {
+		return fmt.Errorf("config %s must not use default placeholder", field)
+	}
+	return nil
 }
 
 // Addr 返回 HTTP 服务监听地址。

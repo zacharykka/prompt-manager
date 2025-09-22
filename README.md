@@ -58,6 +58,10 @@
    make test
    ```
 8. 默认管理员：首次启动会自动创建管理员账号 `admin/admin123`（部署后建议立即修改密码或通过后续管理界面创建新账号并删除默认账号）。
+9. 安全配置：运行前务必设置以下环境变量（可参考 `.env.example`）：
+   - `PROMPT_MANAGER_ACCESS_TOKEN_SECRET` / `PROMPT_MANAGER_REFRESH_TOKEN_SECRET`（≥32 字符）
+   - `PROMPT_MANAGER_API_KEY_HASH_SECRET`
+   - 可选：`PROMPT_MANAGER_INIT_ADMIN_EMAIL`、`PROMPT_MANAGER_INIT_ADMIN_PASSWORD`、`PROMPT_MANAGER_INIT_ADMIN_ROLE`
 
 ## 使用 Docker 部署
 1. 准备环境变量：
