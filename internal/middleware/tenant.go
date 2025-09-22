@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"github.com/zacharykka/prompt-manager/pkg/httpx"
 )
 
 const (
@@ -30,9 +31,7 @@ func TenantInjector() gin.HandlerFunc {
 func RequireTenant() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		if tenant := GetTenantID(ctx); tenant == "" {
-			ctx.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
-				"error": "tenant missing",
-			})
+			httpx.RespondError(ctx, http.StatusUnauthorized, "TENANT_MISSING", "缺少租户标识", nil)
 			return
 		}
 		ctx.Next()

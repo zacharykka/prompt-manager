@@ -20,11 +20,46 @@
 ## 技术栈与基础设施
 - **语言 & 框架**：Go 1.22+、Gin、Clean Architecture、依赖注入（wire 或 fx）。
 - **配置管理**：Viper（`config/default.yaml` + 环境变量），支持热加载。
-- **数据库**：开发环境 SQLite，生产环境 PostgreSQL（pgx / sqlc / gorm）；迁移工具 golang-migrate。
+- **数据库**：开发环境 SQLite，生产环境 PostgreSQL（pgx / sqlc / gorm）；迁移工具 golang-migrate；当前实现采用 `modernc.org/sqlite` 与 `github.com/jackc/pgx/v5` 驱动。
 - **缓存**：Redis（go-redis），承担热点 Prompt 缓存、统计聚合、分布式锁、速率限制。
 - **认证 & 授权**：JWT、API Key/HMAC、RBAC；中长期支持 OIDC。
 - **测试 & CI**：Go test、golangci-lint、Docker Compose 集成测试（Postgres + Redis）；后续接入 CI/CD。
 - **可观测性**：Zap/zerolog 结构化日志、Prometheus 指标、OpenTelemetry Trace（规划中）。
+
+## 快速开始
+1. 安装 Go 1.22+，并确保本地具备 SQLite 与 Redis 运行环境（开发阶段可使用容器）。
+2. 克隆项目并进入目录：
+   ```bash
+   git clone https://github.com/zacharykka/prompt-manager.git
+   cd prompt-manager
+   ```
+3. 安装依赖：
+   ```bash
+   GOCACHE="$(pwd)/.cache/go-build" GOENV="$(pwd)/.config/go/env" go mod tidy
+   ```
+4. 启动开发服务：
+   ```bash
+   make run
+   ```
+   默认读取 `config/default.yaml` 与 `config/development.yaml`，监听 `0.0.0.0:8080`。
+5. 健康检查：访问 `GET http://localhost:8080/healthz`，可查看服务/数据库/Redis 状态。
+6. 运行测试：
+   ```bash
+   make test
+   ```
+
+## 运行时依赖与初始化
+- **数据库**：开发模式使用 `./data/dev.db`（自动创建）；生产模式需配置 PostgreSQL DSN，并调整连接池参数。
+- **Redis**：用于缓存与健康检查，可通过 Docker 快速启动：
+  ```bash
+  docker run --rm -p 6379:6379 redis:7-alpine
+  ```
+- **配置文件**：可通过 `--config-dir` 指定目录，使用 `--env` 或环境变量 `PROMPT_MANAGER_ENV` 切换环境。
+- **日志**：默认输出 JSON 到标准输出，级别由 `logging.level` 决定。
+
+## 当前可用 API
+- `GET /healthz`：返回服务状态、环境信息以及数据库/Redis 的健康详情。
+- 其余业务 API 将在后续里程碑逐步实现。
 
 ## 多租户设计
 - **隔离策略**：共享 Schema，在所有业务表引入 `tenant_id`（联合唯一索引确保租户内唯一性）。
@@ -68,6 +103,7 @@
    - 初始化 Go module、Gin 服务、配置加载、日志/错误响应规范。
    - 实现多租户中间件、用户模型、基础认证（登录/刷新/注销）。
    - 完成 Prompt/PromptVersion 仓储接口与 SQLite/PG 兼容迁移。
+   - ✅ 已交付：依赖容器、数据库/Redis 健康检查、请求日志、租户注入、标准化响应、README 文档更新。
 2. **Milestone 2：业务能力完善**
    - Prompt CRUD、版本管理、变量 Schema 校验、渲染接口（含缓存）。
    - 执行日志写入与统计聚合表、基础统计 API + Redis 缓存。
@@ -83,6 +119,16 @@
 - 确认团队对 IdP、日志采集、部署平台的偏好，提前规划基础设施。
 - 根据租户规模评估是否需要分库分表或引入事件流；当前设计保持灵活。
 - 逐步编写 ADR（Architecture Decision Record），将关键决策沉淀，便于新成员快速上手。
+
+## Git 提交与发布建议
+- **分步提交**：按照功能模块拆分提交，例如“项目骨架初始化”“依赖容器与健康检查”“完善文档”。
+- **示例流程**：
+  1. `git add cmd/server internal pkg config README.md`
+  2. `git commit -m "feat: setup service bootstrap"`
+  3. `git commit -m "feat: add infra container and healthcheck"`
+  4. `git commit -m "docs: update README"`
+  5. `git push origin <branch>`
+- **PR 建议**：在提交 PR 时列出变更范围、测试结果（如 `make test`）、配置改动及对 README 的更新，以便代码审查与部署。
 
 ---
 以上规划将随着实现迭代持续更新，欢迎在 Issue 中记录讨论或补充需求。

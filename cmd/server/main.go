@@ -6,11 +6,13 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/spf13/pflag"
 	"github.com/zacharykka/prompt-manager/internal/app"
 	"github.com/zacharykka/prompt-manager/internal/config"
+	"github.com/zacharykka/prompt-manager/internal/infra"
 	"github.com/zacharykka/prompt-manager/internal/middleware"
 	httpserver "github.com/zacharykka/prompt-manager/internal/server/http"
 	"github.com/zacharykka/prompt-manager/pkg/logger"
@@ -35,6 +37,24 @@ func main() {
 		_ = log.Sync()
 	}()
 
+	initCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	infraContainer, cleanup, err := infra.Initialize(initCtx, cfg, log)
+	cancel()
+	if err != nil {
+		log.Fatal("依赖初始化失败", zap.Error(err))
+	}
+
+	defer func() {
+		if cleanup == nil {
+			return
+		}
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := cleanup(shutdownCtx); err != nil {
+			log.Warn("资源清理失败", zap.Error(err))
+		}
+	}()
+
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
@@ -42,6 +62,10 @@ func main() {
 		Middlewares: []gin.HandlerFunc{
 			middleware.RequestLogger(log),
 			middleware.TenantInjector(),
+		},
+		HealthDeps: &httpserver.HealthDependencies{
+			DB:    infraContainer.DB,
+			Redis: infraContainer.Redis,
 		},
 	})
 
