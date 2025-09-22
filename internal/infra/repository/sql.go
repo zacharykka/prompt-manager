@@ -13,14 +13,12 @@ import (
 
 // NewSQLRepositories 构建基于 *sql.DB 的仓储集合。
 func NewSQLRepositories(db *sql.DB, dialect database.Dialect) *domain.Repositories {
-	tenantRepo := &tenantRepository{db: db, dialect: dialect}
 	userRepo := &userRepository{db: db, dialect: dialect}
 	promptRepo := &promptRepository{db: db, dialect: dialect}
 	promptVersionRepo := &promptVersionRepository{db: db, dialect: dialect}
 	execLogRepo := &promptExecutionLogRepository{db: db, dialect: dialect}
 
 	return &domain.Repositories{
-		Tenants:            tenantRepo,
 		Users:              userRepo,
 		Prompts:            promptRepo,
 		PromptVersions:     promptVersionRepo,
@@ -28,107 +26,7 @@ func NewSQLRepositories(db *sql.DB, dialect database.Dialect) *domain.Repositori
 	}
 }
 
-type tenantRepository struct {
-	db      *sql.DB
-	dialect database.Dialect
-}
-
-type tenantRow struct {
-	id          string
-	name        string
-	description sql.NullString
-	status      string
-	createdAt   time.Time
-	updatedAt   time.Time
-}
-
-func (r *tenantRepository) Create(ctx context.Context, tenant *domain.Tenant) error {
-	ph := database.NewPlaceholderBuilder(r.dialect)
-	query := fmt.Sprintf(`INSERT INTO tenants (id, name, description, status)
-VALUES (%s, %s, %s, %s)`, ph.Next(), ph.Next(), ph.Next(), ph.Next())
-
-	desc := sql.NullString{}
-	if tenant.Description != nil {
-		desc = sql.NullString{String: *tenant.Description, Valid: true}
-	}
-
-	status := tenant.Status
-	if status == "" {
-		status = "active"
-	}
-
-	_, err := r.db.ExecContext(ctx, query, tenant.ID, tenant.Name, desc, status)
-	return err
-}
-
-func (r *tenantRepository) GetByID(ctx context.Context, tenantID string) (*domain.Tenant, error) {
-	ph := database.NewPlaceholderBuilder(r.dialect)
-	query := fmt.Sprintf(`SELECT id, name, description, status, created_at, updated_at FROM tenants WHERE id = %s`, ph.Next())
-
-	var row tenantRow
-	err := r.db.QueryRowContext(ctx, query, tenantID).Scan(&row.id, &row.name, &row.description, &row.status, &row.createdAt, &row.updatedAt)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			return nil, domain.ErrNotFound
-		}
-		return nil, err
-	}
-
-	tenant := &domain.Tenant{
-		ID:        row.id,
-		Name:      row.name,
-		Status:    row.status,
-		CreatedAt: row.createdAt,
-		UpdatedAt: row.updatedAt,
-	}
-	if row.description.Valid {
-		tenant.Description = &row.description.String
-	}
-	return tenant, nil
-}
-
-func (r *tenantRepository) List(ctx context.Context, limit, offset int) ([]*domain.Tenant, error) {
-	if limit <= 0 {
-		limit = 50
-	}
-	if offset < 0 {
-		offset = 0
-	}
-
-	ph := database.NewPlaceholderBuilder(r.dialect)
-	query := fmt.Sprintf(`SELECT id, name, description, status, created_at, updated_at FROM tenants ORDER BY created_at DESC LIMIT %s OFFSET %s`, ph.Next(), ph.Next())
-
-	rows, err := r.db.QueryContext(ctx, query, limit, offset)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var tenants []*domain.Tenant
-	for rows.Next() {
-		var rrow tenantRow
-		if err := rows.Scan(&rrow.id, &rrow.name, &rrow.description, &rrow.status, &rrow.createdAt, &rrow.updatedAt); err != nil {
-			return nil, err
-		}
-
-		tenant := &domain.Tenant{
-			ID:        rrow.id,
-			Name:      rrow.name,
-			Status:    rrow.status,
-			CreatedAt: rrow.createdAt,
-			UpdatedAt: rrow.updatedAt,
-		}
-		if rrow.description.Valid {
-			tenant.Description = &rrow.description.String
-		}
-		tenants = append(tenants, tenant)
-	}
-
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return tenants, nil
-}
+// ---- 用户仓储 ----
 
 type userRepository struct {
 	db      *sql.DB
@@ -137,7 +35,6 @@ type userRepository struct {
 
 type userRow struct {
 	id             string
-	tenantID       string
 	email          string
 	hashedPassword string
 	role           string
@@ -149,8 +46,8 @@ type userRow struct {
 
 func (r *userRepository) Create(ctx context.Context, user *domain.User) error {
 	ph := database.NewPlaceholderBuilder(r.dialect)
-	query := fmt.Sprintf(`INSERT INTO users (id, tenant_id, email, hashed_password, role, status)
-VALUES (%s, %s, %s, %s, %s, %s)`, ph.Next(), ph.Next(), ph.Next(), ph.Next(), ph.Next(), ph.Next())
+	query := fmt.Sprintf(`INSERT INTO users (id, email, hashed_password, role, status)
+VALUES (%s, %s, %s, %s, %s)`, ph.Next(), ph.Next(), ph.Next(), ph.Next(), ph.Next())
 
 	role := user.Role
 	if role == "" {
@@ -161,17 +58,17 @@ VALUES (%s, %s, %s, %s, %s, %s)`, ph.Next(), ph.Next(), ph.Next(), ph.Next(), ph
 		status = "active"
 	}
 
-	_, err := r.db.ExecContext(ctx, query, user.ID, user.TenantID, user.Email, user.HashedPassword, role, status)
+	_, err := r.db.ExecContext(ctx, query, user.ID, user.Email, user.HashedPassword, role, status)
 	return err
 }
 
-func (r *userRepository) GetByEmail(ctx context.Context, tenantID, email string) (*domain.User, error) {
+func (r *userRepository) GetByEmail(ctx context.Context, email string) (*domain.User, error) {
 	ph := database.NewPlaceholderBuilder(r.dialect)
-	query := fmt.Sprintf(`SELECT id, tenant_id, email, hashed_password, role, status, last_login_at, created_at, updated_at
-FROM users WHERE tenant_id = %s AND email = %s`, ph.Next(), ph.Next())
+	query := fmt.Sprintf(`SELECT id, email, hashed_password, role, status, last_login_at, created_at, updated_at
+FROM users WHERE email = %s`, ph.Next())
 
 	var row userRow
-	err := r.db.QueryRowContext(ctx, query, tenantID, email).Scan(&row.id, &row.tenantID, &row.email, &row.hashedPassword, &row.role, &row.status, &row.lastLoginAt, &row.createdAt, &row.updatedAt)
+	err := r.db.QueryRowContext(ctx, query, email).Scan(&row.id, &row.email, &row.hashedPassword, &row.role, &row.status, &row.lastLoginAt, &row.createdAt, &row.updatedAt)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, domain.ErrNotFound
@@ -181,7 +78,6 @@ FROM users WHERE tenant_id = %s AND email = %s`, ph.Next(), ph.Next())
 
 	user := &domain.User{
 		ID:             row.id,
-		TenantID:       row.tenantID,
 		Email:          row.email,
 		HashedPassword: row.hashedPassword,
 		Role:           row.role,
@@ -195,11 +91,11 @@ FROM users WHERE tenant_id = %s AND email = %s`, ph.Next(), ph.Next())
 	return user, nil
 }
 
-func (r *userRepository) UpdateLastLogin(ctx context.Context, tenantID, userID string) error {
+func (r *userRepository) UpdateLastLogin(ctx context.Context, userID string) error {
 	ph := database.NewPlaceholderBuilder(r.dialect)
-	query := fmt.Sprintf(`UPDATE users SET last_login_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = %s AND tenant_id = %s`, ph.Next(), ph.Next())
+	query := fmt.Sprintf(`UPDATE users SET last_login_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = %s`, ph.Next())
 
-	result, err := r.db.ExecContext(ctx, query, userID, tenantID)
+	result, err := r.db.ExecContext(ctx, query, userID)
 	if err != nil {
 		return err
 	}
@@ -213,6 +109,8 @@ func (r *userRepository) UpdateLastLogin(ctx context.Context, tenantID, userID s
 	return nil
 }
 
+// ---- Prompt 仓储 ----
+
 type promptRepository struct {
 	db      *sql.DB
 	dialect database.Dialect
@@ -220,7 +118,6 @@ type promptRepository struct {
 
 type promptRow struct {
 	id              string
-	tenantID        string
 	name            string
 	description     sql.NullString
 	tags            sql.NullString
@@ -232,8 +129,8 @@ type promptRow struct {
 
 func (r *promptRepository) Create(ctx context.Context, prompt *domain.Prompt) error {
 	ph := database.NewPlaceholderBuilder(r.dialect)
-	query := fmt.Sprintf(`INSERT INTO prompts (id, tenant_id, name, description, tags, active_version_id, created_by)
-VALUES (%s, %s, %s, %s, %s, %s, %s)`, ph.Next(), ph.Next(), ph.Next(), ph.Next(), ph.Next(), ph.Next(), ph.Next())
+	query := fmt.Sprintf(`INSERT INTO prompts (id, name, description, tags, active_version_id, created_by)
+VALUES (%s, %s, %s, %s, %s, %s)`, ph.Next(), ph.Next(), ph.Next(), ph.Next(), ph.Next(), ph.Next())
 
 	desc := sql.NullString{}
 	if prompt.Description != nil {
@@ -243,26 +140,26 @@ VALUES (%s, %s, %s, %s, %s, %s, %s)`, ph.Next(), ph.Next(), ph.Next(), ph.Next()
 	if len(prompt.Tags) > 0 {
 		tags = sql.NullString{String: string(prompt.Tags), Valid: true}
 	}
-	activeVersion := sql.NullString{}
+	active := sql.NullString{}
 	if prompt.ActiveVersionID != nil {
-		activeVersion = sql.NullString{String: *prompt.ActiveVersionID, Valid: true}
+		active = sql.NullString{String: *prompt.ActiveVersionID, Valid: true}
 	}
 	createdBy := sql.NullString{}
 	if prompt.CreatedBy != nil {
 		createdBy = sql.NullString{String: *prompt.CreatedBy, Valid: true}
 	}
 
-	_, err := r.db.ExecContext(ctx, query, prompt.ID, prompt.TenantID, prompt.Name, desc, tags, activeVersion, createdBy)
+	_, err := r.db.ExecContext(ctx, query, prompt.ID, prompt.Name, desc, tags, active, createdBy)
 	return err
 }
 
-func (r *promptRepository) GetByID(ctx context.Context, tenantID, promptID string) (*domain.Prompt, error) {
+func (r *promptRepository) GetByID(ctx context.Context, promptID string) (*domain.Prompt, error) {
 	ph := database.NewPlaceholderBuilder(r.dialect)
-	query := fmt.Sprintf(`SELECT id, tenant_id, name, description, tags, active_version_id, created_by, created_at, updated_at
-FROM prompts WHERE tenant_id = %s AND id = %s`, ph.Next(), ph.Next())
+	query := fmt.Sprintf(`SELECT id, name, description, tags, active_version_id, created_by, created_at, updated_at
+FROM prompts WHERE id = %s`, ph.Next())
 
 	var row promptRow
-	err := r.db.QueryRowContext(ctx, query, tenantID, promptID).Scan(&row.id, &row.tenantID, &row.name, &row.description, &row.tags, &row.activeVersionID, &row.createdBy, &row.createdAt, &row.updatedAt)
+	err := r.db.QueryRowContext(ctx, query, promptID).Scan(&row.id, &row.name, &row.description, &row.tags, &row.activeVersionID, &row.createdBy, &row.createdAt, &row.updatedAt)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, domain.ErrNotFound
@@ -272,7 +169,6 @@ FROM prompts WHERE tenant_id = %s AND id = %s`, ph.Next(), ph.Next())
 
 	prompt := &domain.Prompt{
 		ID:        row.id,
-		TenantID:  row.tenantID,
 		Name:      row.name,
 		CreatedAt: row.createdAt,
 		UpdatedAt: row.updatedAt,
@@ -292,7 +188,7 @@ FROM prompts WHERE tenant_id = %s AND id = %s`, ph.Next(), ph.Next())
 	return prompt, nil
 }
 
-func (r *promptRepository) ListByTenant(ctx context.Context, tenantID string, limit, offset int) ([]*domain.Prompt, error) {
+func (r *promptRepository) List(ctx context.Context, limit, offset int) ([]*domain.Prompt, error) {
 	if limit <= 0 {
 		limit = 50
 	}
@@ -300,10 +196,10 @@ func (r *promptRepository) ListByTenant(ctx context.Context, tenantID string, li
 		offset = 0
 	}
 	ph := database.NewPlaceholderBuilder(r.dialect)
-	query := fmt.Sprintf(`SELECT id, tenant_id, name, description, tags, active_version_id, created_by, created_at, updated_at
-FROM prompts WHERE tenant_id = %s ORDER BY updated_at DESC LIMIT %s OFFSET %s`, ph.Next(), ph.Next(), ph.Next())
+	query := fmt.Sprintf(`SELECT id, name, description, tags, active_version_id, created_by, created_at, updated_at
+FROM prompts ORDER BY updated_at DESC LIMIT %s OFFSET %s`, ph.Next(), ph.Next())
 
-	rows, err := r.db.QueryContext(ctx, query, tenantID, limit, offset)
+	rows, err := r.db.QueryContext(ctx, query, limit, offset)
 	if err != nil {
 		return nil, err
 	}
@@ -312,12 +208,11 @@ FROM prompts WHERE tenant_id = %s ORDER BY updated_at DESC LIMIT %s OFFSET %s`, 
 	var prompts []*domain.Prompt
 	for rows.Next() {
 		var row promptRow
-		if err := rows.Scan(&row.id, &row.tenantID, &row.name, &row.description, &row.tags, &row.activeVersionID, &row.createdBy, &row.createdAt, &row.updatedAt); err != nil {
+		if err := rows.Scan(&row.id, &row.name, &row.description, &row.tags, &row.activeVersionID, &row.createdBy, &row.createdAt, &row.updatedAt); err != nil {
 			return nil, err
 		}
 		prompt := &domain.Prompt{
 			ID:        row.id,
-			TenantID:  row.tenantID,
 			Name:      row.name,
 			CreatedAt: row.createdAt,
 			UpdatedAt: row.updatedAt,
@@ -342,16 +237,16 @@ FROM prompts WHERE tenant_id = %s ORDER BY updated_at DESC LIMIT %s OFFSET %s`, 
 	return prompts, nil
 }
 
-func (r *promptRepository) UpdateActiveVersion(ctx context.Context, tenantID, promptID string, versionID *string) error {
+func (r *promptRepository) UpdateActiveVersion(ctx context.Context, promptID string, versionID *string) error {
 	ph := database.NewPlaceholderBuilder(r.dialect)
-	query := fmt.Sprintf(`UPDATE prompts SET active_version_id = %s, updated_at = CURRENT_TIMESTAMP WHERE tenant_id = %s AND id = %s`, ph.Next(), ph.Next(), ph.Next())
+	query := fmt.Sprintf(`UPDATE prompts SET active_version_id = %s, updated_at = CURRENT_TIMESTAMP WHERE id = %s`, ph.Next(), ph.Next())
 
-	activeVersion := sql.NullString{}
+	active := sql.NullString{}
 	if versionID != nil {
-		activeVersion = sql.NullString{String: *versionID, Valid: true}
+		active = sql.NullString{String: *versionID, Valid: true}
 	}
 
-	result, err := r.db.ExecContext(ctx, query, activeVersion, tenantID, promptID)
+	result, err := r.db.ExecContext(ctx, query, active, promptID)
 	if err != nil {
 		return err
 	}
@@ -365,6 +260,8 @@ func (r *promptRepository) UpdateActiveVersion(ctx context.Context, tenantID, pr
 	return nil
 }
 
+// ---- Prompt Version 仓储 ----
+
 type promptVersionRepository struct {
 	db      *sql.DB
 	dialect database.Dialect
@@ -372,7 +269,6 @@ type promptVersionRepository struct {
 
 type promptVersionRow struct {
 	id              string
-	tenantID        string
 	promptID        string
 	versionNumber   int
 	body            string
@@ -385,8 +281,8 @@ type promptVersionRow struct {
 
 func (r *promptVersionRepository) Create(ctx context.Context, version *domain.PromptVersion) error {
 	ph := database.NewPlaceholderBuilder(r.dialect)
-	query := fmt.Sprintf(`INSERT INTO prompt_versions (id, tenant_id, prompt_id, version_number, body, variables_schema, status, metadata, created_by)
-VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)`, ph.Next(), ph.Next(), ph.Next(), ph.Next(), ph.Next(), ph.Next(), ph.Next(), ph.Next(), ph.Next())
+	query := fmt.Sprintf(`INSERT INTO prompt_versions (id, prompt_id, version_number, body, variables_schema, status, metadata, created_by)
+VALUES (%s, %s, %s, %s, %s, %s, %s, %s)`, ph.Next(), ph.Next(), ph.Next(), ph.Next(), ph.Next(), ph.Next(), ph.Next(), ph.Next())
 
 	variables := sql.NullString{}
 	if len(version.VariablesSchema) > 0 {
@@ -406,17 +302,17 @@ VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)`, ph.Next(), ph.Next(), ph.Next(), p
 		status = "draft"
 	}
 
-	_, err := r.db.ExecContext(ctx, query, version.ID, version.TenantID, version.PromptID, version.VersionNumber, version.Body, variables, status, metadata, createdBy)
+	_, err := r.db.ExecContext(ctx, query, version.ID, version.PromptID, version.VersionNumber, version.Body, variables, status, metadata, createdBy)
 	return err
 }
 
-func (r *promptVersionRepository) GetByID(ctx context.Context, tenantID, versionID string) (*domain.PromptVersion, error) {
+func (r *promptVersionRepository) GetByID(ctx context.Context, versionID string) (*domain.PromptVersion, error) {
 	ph := database.NewPlaceholderBuilder(r.dialect)
-	query := fmt.Sprintf(`SELECT id, tenant_id, prompt_id, version_number, body, variables_schema, status, metadata, created_by, created_at
-FROM prompt_versions WHERE tenant_id = %s AND id = %s`, ph.Next(), ph.Next())
+	query := fmt.Sprintf(`SELECT id, prompt_id, version_number, body, variables_schema, status, metadata, created_by, created_at
+FROM prompt_versions WHERE id = %s`, ph.Next())
 
 	var row promptVersionRow
-	err := r.db.QueryRowContext(ctx, query, tenantID, versionID).Scan(&row.id, &row.tenantID, &row.promptID, &row.versionNumber, &row.body, &row.variablesSchema, &row.status, &row.metadata, &row.createdBy, &row.createdAt)
+	err := r.db.QueryRowContext(ctx, query, versionID).Scan(&row.id, &row.promptID, &row.versionNumber, &row.body, &row.variablesSchema, &row.status, &row.metadata, &row.createdBy, &row.createdAt)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, domain.ErrNotFound
@@ -426,7 +322,6 @@ FROM prompt_versions WHERE tenant_id = %s AND id = %s`, ph.Next(), ph.Next())
 
 	version := &domain.PromptVersion{
 		ID:            row.id,
-		TenantID:      row.tenantID,
 		PromptID:      row.promptID,
 		VersionNumber: row.versionNumber,
 		Body:          row.body,
@@ -445,7 +340,7 @@ FROM prompt_versions WHERE tenant_id = %s AND id = %s`, ph.Next(), ph.Next())
 	return version, nil
 }
 
-func (r *promptVersionRepository) ListByPrompt(ctx context.Context, tenantID, promptID string, limit, offset int) ([]*domain.PromptVersion, error) {
+func (r *promptVersionRepository) ListByPrompt(ctx context.Context, promptID string, limit, offset int) ([]*domain.PromptVersion, error) {
 	if limit <= 0 {
 		limit = 50
 	}
@@ -453,10 +348,10 @@ func (r *promptVersionRepository) ListByPrompt(ctx context.Context, tenantID, pr
 		offset = 0
 	}
 	ph := database.NewPlaceholderBuilder(r.dialect)
-	query := fmt.Sprintf(`SELECT id, tenant_id, prompt_id, version_number, body, variables_schema, status, metadata, created_by, created_at
-FROM prompt_versions WHERE tenant_id = %s AND prompt_id = %s ORDER BY version_number DESC LIMIT %s OFFSET %s`, ph.Next(), ph.Next(), ph.Next(), ph.Next())
+	query := fmt.Sprintf(`SELECT id, prompt_id, version_number, body, variables_schema, status, metadata, created_by, created_at
+FROM prompt_versions WHERE prompt_id = %s ORDER BY version_number DESC LIMIT %s OFFSET %s`, ph.Next(), ph.Next(), ph.Next())
 
-	rows, err := r.db.QueryContext(ctx, query, tenantID, promptID, limit, offset)
+	rows, err := r.db.QueryContext(ctx, query, promptID, limit, offset)
 	if err != nil {
 		return nil, err
 	}
@@ -465,12 +360,11 @@ FROM prompt_versions WHERE tenant_id = %s AND prompt_id = %s ORDER BY version_nu
 	var versions []*domain.PromptVersion
 	for rows.Next() {
 		var row promptVersionRow
-		if err := rows.Scan(&row.id, &row.tenantID, &row.promptID, &row.versionNumber, &row.body, &row.variablesSchema, &row.status, &row.metadata, &row.createdBy, &row.createdAt); err != nil {
+		if err := rows.Scan(&row.id, &row.promptID, &row.versionNumber, &row.body, &row.variablesSchema, &row.status, &row.metadata, &row.createdBy, &row.createdAt); err != nil {
 			return nil, err
 		}
 		version := &domain.PromptVersion{
 			ID:            row.id,
-			TenantID:      row.tenantID,
 			PromptID:      row.promptID,
 			VersionNumber: row.versionNumber,
 			Body:          row.body,
@@ -494,12 +388,12 @@ FROM prompt_versions WHERE tenant_id = %s AND prompt_id = %s ORDER BY version_nu
 	return versions, nil
 }
 
-func (r *promptVersionRepository) GetLatestVersionNumber(ctx context.Context, tenantID, promptID string) (int, error) {
+func (r *promptVersionRepository) GetLatestVersionNumber(ctx context.Context, promptID string) (int, error) {
 	ph := database.NewPlaceholderBuilder(r.dialect)
-	query := fmt.Sprintf(`SELECT COALESCE(MAX(version_number), 0) FROM prompt_versions WHERE tenant_id = %s AND prompt_id = %s`, ph.Next(), ph.Next())
+	query := fmt.Sprintf(`SELECT COALESCE(MAX(version_number), 0) FROM prompt_versions WHERE prompt_id = %s`, ph.Next())
 
 	var latest sql.NullInt64
-	if err := r.db.QueryRowContext(ctx, query, tenantID, promptID).Scan(&latest); err != nil {
+	if err := r.db.QueryRowContext(ctx, query, promptID).Scan(&latest); err != nil {
 		return 0, err
 	}
 	if latest.Valid {
@@ -508,6 +402,8 @@ func (r *promptVersionRepository) GetLatestVersionNumber(ctx context.Context, te
 	return 0, nil
 }
 
+// ---- 执行日志仓储 ----
+
 type promptExecutionLogRepository struct {
 	db      *sql.DB
 	dialect database.Dialect
@@ -515,7 +411,6 @@ type promptExecutionLogRepository struct {
 
 type executionLogRow struct {
 	id               string
-	tenantID         string
 	promptID         string
 	promptVersionID  string
 	userID           sql.NullString
@@ -528,8 +423,8 @@ type executionLogRow struct {
 
 func (r *promptExecutionLogRepository) Create(ctx context.Context, log *domain.PromptExecutionLog) error {
 	ph := database.NewPlaceholderBuilder(r.dialect)
-	query := fmt.Sprintf(`INSERT INTO prompt_execution_logs (id, tenant_id, prompt_id, prompt_version_id, user_id, status, duration_ms, request_payload, response_metadata)
-VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)`, ph.Next(), ph.Next(), ph.Next(), ph.Next(), ph.Next(), ph.Next(), ph.Next(), ph.Next(), ph.Next())
+	query := fmt.Sprintf(`INSERT INTO prompt_execution_logs (id, prompt_id, prompt_version_id, user_id, status, duration_ms, request_payload, response_metadata)
+VALUES (%s, %s, %s, %s, %s, %s, %s, %s)`, ph.Next(), ph.Next(), ph.Next(), ph.Next(), ph.Next(), ph.Next(), ph.Next(), ph.Next())
 
 	userID := sql.NullString{}
 	if log.UserID != nil {
@@ -548,19 +443,19 @@ VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)`, ph.Next(), ph.Next(), ph.Next(), p
 		response = sql.NullString{String: string(log.ResponseMetadata), Valid: true}
 	}
 
-	_, err := r.db.ExecContext(ctx, query, log.ID, log.TenantID, log.PromptID, log.PromptVersionID, userID, log.Status, duration, request, response)
+	_, err := r.db.ExecContext(ctx, query, log.ID, log.PromptID, log.PromptVersionID, userID, log.Status, duration, request, response)
 	return err
 }
 
-func (r *promptExecutionLogRepository) ListRecent(ctx context.Context, tenantID, promptID string, limit int) ([]*domain.PromptExecutionLog, error) {
+func (r *promptExecutionLogRepository) ListRecent(ctx context.Context, promptID string, limit int) ([]*domain.PromptExecutionLog, error) {
 	if limit <= 0 {
 		limit = 20
 	}
 	ph := database.NewPlaceholderBuilder(r.dialect)
-	query := fmt.Sprintf(`SELECT id, tenant_id, prompt_id, prompt_version_id, user_id, status, duration_ms, request_payload, response_metadata, created_at
-FROM prompt_execution_logs WHERE tenant_id = %s AND prompt_id = %s ORDER BY created_at DESC LIMIT %s`, ph.Next(), ph.Next(), ph.Next())
+	query := fmt.Sprintf(`SELECT id, prompt_id, prompt_version_id, user_id, status, duration_ms, request_payload, response_metadata, created_at
+FROM prompt_execution_logs WHERE prompt_id = %s ORDER BY created_at DESC LIMIT %s`, ph.Next(), ph.Next())
 
-	rows, err := r.db.QueryContext(ctx, query, tenantID, promptID, limit)
+	rows, err := r.db.QueryContext(ctx, query, promptID, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -569,12 +464,11 @@ FROM prompt_execution_logs WHERE tenant_id = %s AND prompt_id = %s ORDER BY crea
 	var logs []*domain.PromptExecutionLog
 	for rows.Next() {
 		var row executionLogRow
-		if err := rows.Scan(&row.id, &row.tenantID, &row.promptID, &row.promptVersionID, &row.userID, &row.status, &row.durationMs, &row.requestPayload, &row.responseMetadata, &row.createdAt); err != nil {
+		if err := rows.Scan(&row.id, &row.promptID, &row.promptVersionID, &row.userID, &row.status, &row.durationMs, &row.requestPayload, &row.responseMetadata, &row.createdAt); err != nil {
 			return nil, err
 		}
 		log := &domain.PromptExecutionLog{
 			ID:              row.id,
-			TenantID:        row.tenantID,
 			PromptID:        row.promptID,
 			PromptVersionID: row.promptVersionID,
 			Status:          row.status,

@@ -27,12 +27,3 @@ auth:
   apiKeyHashSecret: change-me-api
 logging:
   level: info
-
-bootstrap:
-  enabled: true
-  tenantID: default-tenant
-  tenantName: Default Tenant
-  tenantDescription: System default tenant
-  adminEmail: admin
-  adminPassword: admin123
-  adminRole: admin

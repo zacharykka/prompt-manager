@@ -4,13 +4,14 @@ import (
 	"context"
 	"database/sql"
 
+	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
 	"github.com/zacharykka/prompt-manager/internal/config"
 	"github.com/zacharykka/prompt-manager/internal/domain"
-	"github.com/zacharykka/prompt-manager/internal/infra/bootstrap"
 	"github.com/zacharykka/prompt-manager/internal/infra/cache"
 	"github.com/zacharykka/prompt-manager/internal/infra/database"
 	"github.com/zacharykka/prompt-manager/internal/infra/repository"
+	authutil "github.com/zacharykka/prompt-manager/pkg/auth"
 	"go.uber.org/multierr"
 	"go.uber.org/zap"
 )
@@ -35,17 +36,18 @@ func Initialize(ctx context.Context, cfg *config.Config, logger *zap.Logger) (*C
 	dialect := database.NewDialect(cfg.Database.Driver)
 	container.Repos = repository.NewSQLRepositories(db, dialect)
 
-	if err := bootstrap.EnsureDefaultAdmin(ctx, container.Repos, cfg.Bootstrap, logger); err != nil {
-		_ = db.Close()
-		return nil, nil, err
-	}
-
 	redisClient, err := cache.New(ctx, cfg.Redis, logger)
 	if err != nil {
 		_ = db.Close()
 		return nil, nil, err
 	}
 	container.Redis = redisClient
+
+	if err := ensureDefaultAdmin(ctx, container.Repos, logger); err != nil {
+		_ = db.Close()
+		_ = redisClient.Close()
+		return nil, nil, err
+	}
 
 	cleanup := func(ctx context.Context) error {
 		var errs error
@@ -63,4 +65,35 @@ func Initialize(ctx context.Context, cfg *config.Config, logger *zap.Logger) (*C
 	}
 
 	return container, cleanup, nil
+}
+
+func ensureDefaultAdmin(ctx context.Context, repos *domain.Repositories, logger *zap.Logger) error {
+	const defaultEmail = "admin"
+	const defaultPassword = "admin123"
+
+	if _, err := repos.Users.GetByEmail(ctx, defaultEmail); err == nil {
+		logger.Info("default admin already exists", zap.String("email", defaultEmail))
+		return nil
+	} else if err != domain.ErrNotFound {
+		return err
+	}
+
+	hash, err := authutil.HashPassword(defaultPassword)
+	if err != nil {
+		return err
+	}
+
+	admin := &domain.User{
+		ID:             uuid.NewString(),
+		Email:          defaultEmail,
+		HashedPassword: hash,
+		Role:           "admin",
+		Status:         "active",
+	}
+	if err := repos.Users.Create(ctx, admin); err != nil {
+		return err
+	}
+
+	logger.Info("default admin created", zap.String("email", defaultEmail))
+	return nil
 }

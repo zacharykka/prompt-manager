@@ -37,7 +37,6 @@ func TestAuthGuard_Success(t *testing.T) {
 	})
 
 	token, err := authutil.GenerateToken("secret", time.Minute, authutil.Claims{
-		TenantID:  "tenant",
 		UserID:    "user",
 		Role:      "admin",
 		TokenType: "access",

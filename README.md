@@ -1,7 +1,7 @@
 # Prompt Manager 后端规划
 
 ## 项目愿景
-- 建立统一的 Prompt 资产库，支撑多租户团队共享与治理。
+- 建立统一的 Prompt 资产库，支撑多用户团队共享与治理。
 - 提供版本化、可审计的 Prompt 生命周期管理，便于回溯与演进。
 - 暴露标准化 API，后续可扩展管理后台、统计大屏及多模型适配。
 
@@ -13,8 +13,8 @@
 ## 核心功能模块
 - Prompt 模板管理：创建、查询、标签、变量 Schema 校验、版本化。
 - Prompt 版本控制：草稿/发布版、差异对比、历史追踪。
-- Prompt 执行与统计：变量渲染、执行日志、按 Prompt/版本/租户聚合统计。
-- 多租户治理：租户隔离、角色与权限、审计日志。
+- Prompt 执行与统计：变量渲染、执行日志、按 Prompt/版本聚合统计。
+- 用户与权限：支持多用户登录，按角色限制操作，记录审计信息。
 - 可扩展模块（后续）：Prompt 套件组合、A/B 实验、可视化后台、模型切换策略。
 
 ## 技术栈与基础设施
@@ -57,7 +57,7 @@
    ```bash
    make test
    ```
-8. 默认管理员：首次启动会自动创建默认租户与管理员账号，凭据为 `tenant_id=default-tenant`、`email=admin`、`password=admin123`（部署后建议立即修改密码或关闭 `bootstrap.enabled`）。
+8. 默认管理员：首次启动会自动创建管理员账号 `admin/admin123`（部署后建议立即修改密码或通过后续管理界面创建新账号并删除默认账号）。
 
 ## 使用 Docker 部署
 1. 准备环境变量：
@@ -94,42 +94,35 @@
 - **配置文件**：可通过 `--config-dir` 指定目录，使用 `--env` 或环境变量 `PROMPT_MANAGER_ENV` 切换环境。
 - **日志**：默认输出 JSON 到标准输出，级别由 `logging.level` 决定。
 - **迁移执行**：推荐在 CI/CD 或启动脚本中调用 `migrate` CLI；也可将迁移步骤编排入 `Makefile`（例如新增 `make migrate`）。
-- **默认管理员**：可通过 `bootstrap.*` 配置或环境变量 `PROMPT_MANAGER_BOOTSTRAP_*` 控制默认租户/管理员的启用、邮箱与密码；上线后建议关闭或改为自定义值。
 
 ## 当前可用 API
 - `GET /healthz`：返回服务状态、环境信息以及数据库/Redis 的健康详情。
-- `POST /api/v1/auth/register`：注册租户内用户，要求 `tenant_id`、`email`、`password`、`role`（可选）。
-- `POST /api/v1/auth/login`：使用 `tenant_id + email + password` 登录，返回访问令牌与刷新令牌。
+- `POST /api/v1/auth/register`：注册用户，字段 `email`、`password`、`role`（可选）。
+- `POST /api/v1/auth/login`：使用 `email + password` 登录，返回访问令牌与刷新令牌。
 - `POST /api/v1/auth/refresh`：提供刷新令牌换取新的访问/刷新令牌。
 - 其余业务 API 将在后续里程碑逐步实现。
 
 ### 认证流程说明
-1. **注册**：管理员调用 `/api/v1/auth/register` 创建用户，密码会以 bcrypt 哈希存储。
+1. **注册**：管理员调用 `/api/v1/auth/register` 创建用户，密码以 bcrypt 哈希存储。
 2. **登录**：用户凭凭证调用 `/api/v1/auth/login`，获得 `access_token` 与 `refresh_token`。
-3. **访问受保护资源**：将 `Authorization: Bearer <access_token>` 加入请求头，`AuthGuard` 中间件会校验令牌并在上下文注入 `tenant_id`、`user_id`、`user_role`。
+3. **访问受保护资源**：将 `Authorization: Bearer <access_token>` 加入请求头，`AuthGuard` 中间件校验令牌并在上下文注入 `user_id` 与 `user_role`。
 4. **刷新令牌**：在访问令牌即将过期时，调用 `/api/v1/auth/refresh` 补发新的令牌。
 5. **统一错误格式**：所有认证相关接口返回 `code`、`message`、`details`，便于前端统一处理。
-
-## 多租户设计
-- **隔离策略**：共享 Schema，在所有业务表引入 `tenant_id`（联合唯一索引确保租户内唯一性）。
-- **上下文传播**：认证中间件解析 Token/API Key，写入 Gin Context → Service 层通过 `TenantAwareRepository` 强制过滤。
-- **RBAC**：租户维度角色（Admin/Editor/Viewer），权限矩阵随租户配置扩展；审计表记录关键操作。
-- **未来扩展**：若需数据库级隔离，可新增按租户分库的策略，保持 Repository 抽象层的驱动切换能力。
 
 ## 认证策略（推荐方案）
 1. **自托管用户名/密码 + JWT/Refresh Token**
    - 密码哈希使用 bcrypt/argon2，登录颁发 Access Token（短期）+ Refresh Token（长期）。
-   - Token Payload：`sub`, `tenant_id`, `user_id`, `role`, `exp`；Refresh Token 存储于 Redis，绑定 `device_id`。
-   - Gin 中间件校验签名并注入租户上下文，Service/RBAC 层二次校验权限。
+   - Token Payload：`sub`, `user_id`, `role`, `exp`；Refresh Token 可存储于 Redis 绑定 `device_id`。
+   - Gin 中间件校验签名并注入用户上下文，Service/RBAC 层据此校验权限。
 2. **机器对机器访问（API Key/HMAC）**
-   - 针对内部服务或第三方集成，签发带 `tenant_id` 的 API Key，调用方通过 `X-API-KEY` 或 HMAC 头访问。
-   - 后端校验 Key 的启用状态与租户绑定，支持速率限制与即时吊销。
+   - 针对内部服务或第三方集成，签发 API Key，调用方通过 `X-API-KEY` 或 HMAC 头访问。
+   - 后端校验 Key 的启用状态并支持速率限制、即时吊销。
 3. **未来演进：对接 OIDC**
    - 预留 `/.well-known/jwks.json`、Scopes 设计，后续可切换至 Auth0/Keycloak；保持 Handler 层 Token 抽象，便于更换 IdP。
 
 ## 缓存一致性策略
 - **Prompt 数据缓存**
-  - Key 约定：`tenant:{tenant_id}:prompt:{prompt_id}:v{version}`，内容含 Prompt 元数据 + 渲染模板。
+  - Key 约定：`prompt:{prompt_id}:v{version}`，内容含 Prompt 元数据 + 渲染模板。
   - 更新流程：Service 执行“先删缓存 → 写数据库 → 成功后写新缓存”；写库失败时恢复旧缓存，避免脏读。
   - 缓存穿透：对不存在的资源写入短 TTL 空值；缓存击穿使用 Redis 分布式锁（`SETNX`）。
   - 版本切换：缓存键包含版本号，新旧版本并存，旧键设置短 TTL，确保正在执行的请求自然过期。
@@ -150,9 +143,9 @@
 ## 开发计划与里程碑
 1. **Milestone 1：项目骨架 & 核心模型**
    - 初始化 Go module、Gin 服务、配置加载、日志/错误响应规范。
-   - 实现多租户中间件、用户模型、基础认证（登录/刷新/注销）。
+   - 完成用户模型与基础认证（注册/登录/刷新）。
    - 完成 Prompt/PromptVersion 仓储接口与 SQLite/PG 兼容迁移。
-   - ✅ 已交付：依赖容器、数据库/Redis 健康检查、请求日志、租户注入、标准化响应、README 文档更新。
+   - ✅ 已交付：依赖容器、数据库/Redis 健康检查、请求日志、标准化响应、README 文档更新。
 2. **Milestone 2：业务能力完善**
    - Prompt CRUD、版本管理、变量 Schema 校验、渲染接口（含缓存）。
    - 执行日志写入与统计聚合表、基础统计 API + Redis 缓存。
@@ -166,7 +159,7 @@
 
 ## 后续协作建议
 - 确认团队对 IdP、日志采集、部署平台的偏好，提前规划基础设施。
-- 根据租户规模评估是否需要分库分表或引入事件流；当前设计保持灵活。
+- 如需横向扩展，可评估引入事件流或服务化抽象，目前设计保持灵活。
 - 逐步编写 ADR（Architecture Decision Record），将关键决策沉淀，便于新成员快速上手。
 
 ## Git 提交与发布建议

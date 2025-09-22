@@ -9,7 +9,6 @@ import (
 
 // Claims 定义标准化的访问令牌载荷。
 type Claims struct {
-	TenantID  string `json:"tenant_id"`
 	UserID    string `json:"user_id"`
 	Role      string `json:"role"`
 	TokenType string `json:"token_type"`

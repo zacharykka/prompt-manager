@@ -45,23 +45,13 @@ func (s *Service) WithClock(now func() time.Time) {
 }
 
 // Register 创建新用户。
-func (s *Service) Register(ctx context.Context, tenantID, email, password, role string) (*domain.User, error) {
-	if tenantID == "" {
-		return nil, ErrTenantRequired
-	}
-	email = strings.TrimSpace(strings.ToLower(email))
+func (s *Service) Register(ctx context.Context, email, password, role string) (*domain.User, error) {
+	email = normalizeEmail(email)
 	if email == "" || password == "" {
 		return nil, ErrInvalidInput
 	}
 
-	if _, err := s.repos.Tenants.GetByID(ctx, tenantID); err != nil {
-		if errors.Is(err, domain.ErrNotFound) {
-			return nil, ErrTenantNotFound
-		}
-		return nil, err
-	}
-
-	if _, err := s.repos.Users.GetByEmail(ctx, tenantID, email); err == nil {
+	if _, err := s.repos.Users.GetByEmail(ctx, email); err == nil {
 		return nil, ErrUserExists
 	} else if !errors.Is(err, domain.ErrNotFound) {
 		return nil, err
@@ -74,7 +64,6 @@ func (s *Service) Register(ctx context.Context, tenantID, email, password, role 
 
 	user := &domain.User{
 		ID:             uuid.NewString(),
-		TenantID:       tenantID,
 		Email:          email,
 		HashedPassword: hash,
 		Role:           normalizedRole(role),
@@ -85,8 +74,7 @@ func (s *Service) Register(ctx context.Context, tenantID, email, password, role 
 		return nil, err
 	}
 
-	// 查询创建后的完整记录（含时间戳）
-	created, err := s.repos.Users.GetByEmail(ctx, tenantID, email)
+	created, err := s.repos.Users.GetByEmail(ctx, email)
 	if err != nil {
 		return nil, err
 	}
@@ -94,13 +82,14 @@ func (s *Service) Register(ctx context.Context, tenantID, email, password, role 
 }
 
 // Login 校验用户凭证并返回令牌。
-func (s *Service) Login(ctx context.Context, tenantID, email, password string) (*Tokens, *domain.User, error) {
-	email = strings.TrimSpace(strings.ToLower(email))
-	if tenantID == "" || email == "" || password == "" {
+
+func (s *Service) Login(ctx context.Context, email, password string) (*Tokens, *domain.User, error) {
+	email = normalizeEmail(email)
+	if email == "" || password == "" {
 		return nil, nil, ErrInvalidCredentials
 	}
 
-	user, err := s.repos.Users.GetByEmail(ctx, tenantID, email)
+	user, err := s.repos.Users.GetByEmail(ctx, email)
 	if err != nil {
 		if errors.Is(err, domain.ErrNotFound) {
 			return nil, nil, ErrInvalidCredentials
@@ -116,7 +105,7 @@ func (s *Service) Login(ctx context.Context, tenantID, email, password string) (
 		return nil, nil, ErrInvalidCredentials
 	}
 
-	if err := s.repos.Users.UpdateLastLogin(ctx, tenantID, user.ID); err != nil && !errors.Is(err, domain.ErrNotFound) {
+	if err := s.repos.Users.UpdateLastLogin(ctx, user.ID); err != nil && !errors.Is(err, domain.ErrNotFound) {
 		return nil, nil, err
 	}
 
@@ -139,7 +128,7 @@ func (s *Service) Refresh(ctx context.Context, refreshToken string) (*Tokens, *d
 		return nil, nil, ErrTokenInvalid
 	}
 
-	user, err := s.repos.Users.GetByEmail(ctx, claims.TenantID, claims.Subject)
+	user, err := s.repos.Users.GetByEmail(ctx, claims.Subject)
 	if err != nil {
 		if errors.Is(err, domain.ErrNotFound) {
 			return nil, nil, ErrTokenInvalid
@@ -167,7 +156,6 @@ func (s *Service) issueTokens(user *domain.User) (*Tokens, error) {
 	}
 
 	accessClaims := authutil.Claims{
-		TenantID:  user.TenantID,
 		UserID:    user.ID,
 		Role:      user.Role,
 		TokenType: "access",
@@ -184,7 +172,6 @@ func (s *Service) issueTokens(user *domain.User) (*Tokens, error) {
 	}
 
 	refreshClaims := authutil.Claims{
-		TenantID:  user.TenantID,
 		UserID:    user.ID,
 		Role:      user.Role,
 		TokenType: "refresh",
@@ -217,4 +204,8 @@ func normalizedRole(role string) string {
 	default:
 		return "viewer"
 	}
+}
+
+func normalizeEmail(email string) string {
+	return strings.TrimSpace(strings.ToLower(email))
 }

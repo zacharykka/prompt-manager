@@ -36,7 +36,6 @@ func AuthGuard(accessSecret string) gin.HandlerFunc {
 			return
 		}
 
-		ctx.Set(TenantContextKey, claims.TenantID)
 		ctx.Set(UserContextKey, claims.UserID)
 		ctx.Set(UserRoleContextKey, claims.Role)
 		ctx.Set("auth_claims", claims)

@@ -13,12 +13,3 @@ redis:
   poolSize: 50
 logging:
   level: warn
-
-bootstrap:
-  enabled: true
-  tenantID: prod-tenant
-  tenantName: Production Tenant
-  tenantDescription: Default production tenant (请在部署后更新)
-  adminEmail: admin
-  adminPassword: admin123
-  adminRole: admin

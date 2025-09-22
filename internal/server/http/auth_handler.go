@@ -26,14 +26,12 @@ func (h *AuthHandler) RegisterRoutes(rg *gin.RouterGroup) {
 }
 
 type registerRequest struct {
-	TenantID string `json:"tenant_id" binding:"required"`
 	Email    string `json:"email" binding:"required"`
 	Password string `json:"password" binding:"required,min=6"`
 	Role     string `json:"role"`
 }
 
 type loginRequest struct {
-	TenantID string `json:"tenant_id" binding:"required"`
 	Email    string `json:"email" binding:"required"`
 	Password string `json:"password" binding:"required"`
 }
@@ -42,7 +40,7 @@ type refreshRequest struct {
 	RefreshToken string `json:"refresh_token" binding:"required"`
 }
 
-// Register 创建租户用户。
+// Register 创建用户。
 func (h *AuthHandler) Register(ctx *gin.Context) {
 	var req registerRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
@@ -50,7 +48,7 @@ func (h *AuthHandler) Register(ctx *gin.Context) {
 		return
 	}
 
-	user, err := h.service.Register(ctx, req.TenantID, req.Email, req.Password, req.Role)
+	user, err := h.service.Register(ctx, req.Email, req.Password, req.Role)
 	if err != nil {
 		h.handleError(ctx, err)
 		return
@@ -67,7 +65,7 @@ func (h *AuthHandler) Login(ctx *gin.Context) {
 		return
 	}
 
-	tokens, user, err := h.service.Login(ctx, req.TenantID, req.Email, req.Password)
+	tokens, user, err := h.service.Login(ctx, req.Email, req.Password)
 	if err != nil {
 		h.handleError(ctx, err)
 		return
@@ -101,10 +99,8 @@ func (h *AuthHandler) Refresh(ctx *gin.Context) {
 
 func (h *AuthHandler) handleError(ctx *gin.Context, err error) {
 	switch err {
-	case authsvc.ErrTenantRequired, authsvc.ErrInvalidInput:
+	case authsvc.ErrInvalidInput:
 		httpx.RespondError(ctx, http.StatusBadRequest, "INVALID_INPUT", err.Error(), nil)
-	case authsvc.ErrTenantNotFound:
-		httpx.RespondError(ctx, http.StatusNotFound, "TENANT_NOT_FOUND", err.Error(), nil)
 	case authsvc.ErrUserExists:
 		httpx.RespondError(ctx, http.StatusConflict, "USER_EXISTS", err.Error(), nil)
 	case authsvc.ErrInvalidCredentials:

@@ -37,39 +37,41 @@ func setupTestDB(t *testing.T) (*sql.DB, func()) {
 	return db, cleanup
 }
 
-func TestTenantRepository_CreateAndGet(t *testing.T) {
+func TestUserRepository_CreateAndGet(t *testing.T) {
 	db, cleanup := setupTestDB(t)
 	defer cleanup()
 
 	repos := NewSQLRepositories(db, database.NewDialect("sqlite"))
 
 	ctx := context.Background()
-	tenantID := uuid.NewString()
-	name := "Acme"
-	desc := "Test Tenant"
+	userID := uuid.NewString()
 
-	tenant := &domain.Tenant{ID: tenantID, Name: name, Description: &desc}
-	if err := repos.Tenants.Create(ctx, tenant); err != nil {
-		t.Fatalf("create tenant: %v", err)
+	user := &domain.User{ID: userID, Email: "user@example.com", HashedPassword: "hashed", Role: "admin"}
+	if err := repos.Users.Create(ctx, user); err != nil {
+		t.Fatalf("create user: %v", err)
 	}
 
-	stored, err := repos.Tenants.GetByID(ctx, tenantID)
+	stored, err := repos.Users.GetByEmail(ctx, "user@example.com")
 	if err != nil {
-		t.Fatalf("get tenant: %v", err)
+		t.Fatalf("get user: %v", err)
 	}
-	if stored.Name != name {
-		t.Fatalf("expected name %s got %s", name, stored.Name)
-	}
-	if stored.Description == nil || *stored.Description != desc {
-		t.Fatalf("expected description %s got %v", desc, stored.Description)
+	if stored.ID != userID {
+		t.Fatalf("expected id %s got %s", userID, stored.ID)
 	}
 
-	list, err := repos.Tenants.List(ctx, 10, 0)
-	if err != nil {
-		t.Fatalf("list tenants: %v", err)
+	if err := repos.Users.UpdateLastLogin(ctx, userID); err != nil {
+		t.Fatalf("update last login: %v", err)
 	}
-	if len(list) != 1 {
-		t.Fatalf("expected 1 tenant got %d", len(list))
+
+	updated, err := repos.Users.GetByEmail(ctx, "user@example.com")
+	if err != nil {
+		t.Fatalf("get user: %v", err)
+	}
+	if updated.LastLoginAt == nil {
+		t.Fatalf("expected last login timestamp")
+	}
+	if time.Since(*updated.LastLoginAt) > time.Minute {
+		t.Fatalf("last login timestamp too old")
 	}
 }
 
@@ -80,21 +82,8 @@ func TestPromptRepositories_Workflow(t *testing.T) {
 	repos := NewSQLRepositories(db, database.NewDialect("sqlite"))
 	ctx := context.Background()
 
-	tenantID := uuid.NewString()
-	tenant := &domain.Tenant{ID: tenantID, Name: "Tenant"}
-	if err := repos.Tenants.Create(ctx, tenant); err != nil {
-		t.Fatalf("create tenant: %v", err)
-	}
-
 	userID := uuid.NewString()
-	user := &domain.User{
-		ID:             userID,
-		TenantID:       tenantID,
-		Email:          "user@example.com",
-		HashedPassword: "hashed",
-		Role:           "admin",
-	}
-	if err := repos.Users.Create(ctx, user); err != nil {
+	if err := repos.Users.Create(ctx, &domain.User{ID: userID, Email: "admin@example.com", HashedPassword: "hashed", Role: "admin"}); err != nil {
 		t.Fatalf("create user: %v", err)
 	}
 
@@ -102,7 +91,6 @@ func TestPromptRepositories_Workflow(t *testing.T) {
 	tags := json.RawMessage(`["tag1","tag2"]`)
 	prompt := &domain.Prompt{
 		ID:        promptID,
-		TenantID:  tenantID,
 		Name:      "Prompt-A",
 		Tags:      tags,
 		CreatedBy: &userID,
@@ -111,7 +99,7 @@ func TestPromptRepositories_Workflow(t *testing.T) {
 		t.Fatalf("create prompt: %v", err)
 	}
 
-	storedPrompt, err := repos.Prompts.GetByID(ctx, tenantID, promptID)
+	storedPrompt, err := repos.Prompts.GetByID(ctx, promptID)
 	if err != nil {
 		t.Fatalf("get prompt: %v", err)
 	}
@@ -123,7 +111,6 @@ func TestPromptRepositories_Workflow(t *testing.T) {
 	schema := json.RawMessage(`{"vars":[{"name":"city"}]}`)
 	version := &domain.PromptVersion{
 		ID:              versionID,
-		TenantID:        tenantID,
 		PromptID:        promptID,
 		VersionNumber:   1,
 		Body:            "Hello {{.city}}",
@@ -135,7 +122,7 @@ func TestPromptRepositories_Workflow(t *testing.T) {
 		t.Fatalf("create version: %v", err)
 	}
 
-	latest, err := repos.PromptVersions.GetLatestVersionNumber(ctx, tenantID, promptID)
+	latest, err := repos.PromptVersions.GetLatestVersionNumber(ctx, promptID)
 	if err != nil {
 		t.Fatalf("latest number: %v", err)
 	}
@@ -143,11 +130,11 @@ func TestPromptRepositories_Workflow(t *testing.T) {
 		t.Fatalf("expected latest version 1 got %d", latest)
 	}
 
-	if err := repos.Prompts.UpdateActiveVersion(ctx, tenantID, promptID, &versionID); err != nil {
+	if err := repos.Prompts.UpdateActiveVersion(ctx, promptID, &versionID); err != nil {
 		t.Fatalf("update active version: %v", err)
 	}
 
-	updatedPrompt, err := repos.Prompts.GetByID(ctx, tenantID, promptID)
+	updatedPrompt, err := repos.Prompts.GetByID(ctx, promptID)
 	if err != nil {
 		t.Fatalf("get prompt: %v", err)
 	}
@@ -157,7 +144,6 @@ func TestPromptRepositories_Workflow(t *testing.T) {
 
 	execLog := &domain.PromptExecutionLog{
 		ID:               uuid.NewString(),
-		TenantID:         tenantID,
 		PromptID:         promptID,
 		PromptVersionID:  versionID,
 		UserID:           &userID,
@@ -170,7 +156,7 @@ func TestPromptRepositories_Workflow(t *testing.T) {
 		t.Fatalf("create exec log: %v", err)
 	}
 
-	logs, err := repos.PromptExecutionLog.ListRecent(ctx, tenantID, promptID, 10)
+	logs, err := repos.PromptExecutionLog.ListRecent(ctx, promptID, 10)
 	if err != nil {
 		t.Fatalf("list logs: %v", err)
 	}
@@ -179,44 +165,5 @@ func TestPromptRepositories_Workflow(t *testing.T) {
 	}
 	if logs[0].DurationMs != 120 {
 		t.Fatalf("unexpected duration: %d", logs[0].DurationMs)
-	}
-}
-
-func TestUserRepository_UpdateLastLogin(t *testing.T) {
-	db, cleanup := setupTestDB(t)
-	defer cleanup()
-
-	repos := NewSQLRepositories(db, database.NewDialect("sqlite"))
-	ctx := context.Background()
-
-	tenantID := uuid.NewString()
-	if err := repos.Tenants.Create(ctx, &domain.Tenant{ID: tenantID, Name: "Tenant"}); err != nil {
-		t.Fatalf("create tenant: %v", err)
-	}
-
-	userID := uuid.NewString()
-	user := &domain.User{
-		ID:             userID,
-		TenantID:       tenantID,
-		Email:          "user@example.com",
-		HashedPassword: "hashed",
-	}
-	if err := repos.Users.Create(ctx, user); err != nil {
-		t.Fatalf("create user: %v", err)
-	}
-
-	if err := repos.Users.UpdateLastLogin(ctx, tenantID, userID); err != nil {
-		t.Fatalf("update last login: %v", err)
-	}
-
-	stored, err := repos.Users.GetByEmail(ctx, tenantID, "user@example.com")
-	if err != nil {
-		t.Fatalf("get user: %v", err)
-	}
-	if stored.LastLoginAt == nil {
-		t.Fatalf("expected last login timestamp")
-	}
-	if time.Since(*stored.LastLoginAt) > time.Minute {
-		t.Fatalf("last login timestamp too old: %v", stored.LastLoginAt)
 	}
 }

@@ -65,7 +65,6 @@ func main() {
 	engine := httpserver.NewEngine(cfg, log, httpserver.RouterOptions{
 		Middlewares: []gin.HandlerFunc{
 			middleware.RequestLogger(log),
-			middleware.TenantInjector(),
 		},
 		HealthDeps: &httpserver.HealthDependencies{
 			DB:    infraContainer.DB,
