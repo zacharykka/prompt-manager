@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	domain "github.com/zacharykka/prompt-manager/internal/domain"
 	"github.com/zacharykka/prompt-manager/internal/infra/database"
 	"github.com/zacharykka/prompt-manager/internal/infra/repository"
 )
@@ -93,5 +94,54 @@ func TestCreatePromptDuplicate(t *testing.T) {
 	}
 	if _, err := svc.CreatePrompt(context.Background(), CreatePromptInput{Name: "Duplicate"}); err != ErrPromptAlreadyExists {
 		t.Fatalf("expected ErrPromptAlreadyExists got %v", err)
+	}
+}
+
+func TestGetExecutionStats(t *testing.T) {
+	svc, cleanup := setupPromptService(t)
+	defer cleanup()
+
+	prompt, err := svc.CreatePrompt(context.Background(), CreatePromptInput{Name: "Stats"})
+	if err != nil {
+		t.Fatalf("create prompt: %v", err)
+	}
+
+	// create versions and logs via repository since service does not expose logging yet
+	version, err := svc.CreatePromptVersion(context.Background(), CreatePromptVersionInput{
+		PromptID: prompt.ID,
+		Body:     "test",
+		Status:   "published",
+		Activate: true,
+	})
+	if err != nil {
+		t.Fatalf("create version: %v", err)
+	}
+
+	repos := svc.repos
+	for i := 0; i < 3; i++ {
+		status := "success"
+		if i == 2 {
+			status = "failed"
+		}
+		if err := repos.PromptExecutionLog.Create(context.Background(), &domain.PromptExecutionLog{
+			ID:              uuid.NewString(),
+			PromptID:        prompt.ID,
+			PromptVersionID: version.ID,
+			Status:          status,
+			DurationMs:      int64(100 + i*10),
+		}); err != nil {
+			t.Fatalf("create log: %v", err)
+		}
+	}
+
+	stats, err := svc.GetExecutionStats(context.Background(), prompt.ID, 7)
+	if err != nil {
+		t.Fatalf("get stats: %v", err)
+	}
+	if len(stats) == 0 {
+		t.Fatalf("expected stats entry")
+	}
+	if stats[0].TotalCalls != 3 {
+		t.Fatalf("unexpected total calls: %d", stats[0].TotalCalls)
 	}
 }

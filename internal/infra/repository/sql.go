@@ -421,6 +421,13 @@ type executionLogRow struct {
 	createdAt        time.Time
 }
 
+type executionAggregateRow struct {
+	dayStr       string
+	totalCalls   int
+	successCalls int
+	averageMs    sql.NullFloat64
+}
+
 func (r *promptExecutionLogRepository) Create(ctx context.Context, log *domain.PromptExecutionLog) error {
 	ph := database.NewPlaceholderBuilder(r.dialect)
 	query := fmt.Sprintf(`INSERT INTO prompt_execution_logs (id, prompt_id, prompt_version_id, user_id, status, duration_ms, request_payload, response_metadata)
@@ -492,4 +499,49 @@ FROM prompt_execution_logs WHERE prompt_id = %s ORDER BY created_at DESC LIMIT %
 		return nil, err
 	}
 	return logs, nil
+}
+
+func (r *promptExecutionLogRepository) AggregateUsage(ctx context.Context, promptID string, from time.Time) ([]*domain.PromptExecutionAggregate, error) {
+	ph := database.NewPlaceholderBuilder(r.dialect)
+	query := fmt.Sprintf(`SELECT DATE(created_at) as day,
+        COUNT(*) as total_calls,
+        SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) as success_calls,
+        AVG(duration_ms) as average_ms
+      FROM prompt_execution_logs
+      WHERE prompt_id = %s AND created_at >= %s
+      GROUP BY DATE(created_at)
+      ORDER BY DATE(created_at) DESC`, ph.Next(), ph.Next())
+
+	rows, err := r.db.QueryContext(ctx, query, promptID, from)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var stats []*domain.PromptExecutionAggregate
+	for rows.Next() {
+		var row executionAggregateRow
+		if err := rows.Scan(&row.dayStr, &row.totalCalls, &row.successCalls, &row.averageMs); err != nil {
+			return nil, err
+		}
+		aggregate := &domain.PromptExecutionAggregate{
+			TotalCalls:   row.totalCalls,
+			SuccessCalls: row.successCalls,
+		}
+		if row.dayStr != "" {
+			if parsed, err := time.Parse("2006-01-02", row.dayStr); err == nil {
+				aggregate.Day = parsed
+			}
+		}
+		if row.averageMs.Valid {
+			aggregate.AverageMillis = row.averageMs.Float64
+		}
+		stats = append(stats, aggregate)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return stats, nil
 }

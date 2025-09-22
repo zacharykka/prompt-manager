@@ -135,3 +135,46 @@ func TestPromptHandler_CreateVersion(t *testing.T) {
 		t.Fatalf("expected 200 got %d body=%s", versionRec.Code, versionRec.Body.String())
 	}
 }
+
+func TestPromptHandler_GetStats(t *testing.T) {
+	handler, cleanup := setupPromptHandler(t)
+	defer cleanup()
+
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	router.Use(func(ctx *gin.Context) {
+		ctx.Set(middleware.UserContextKey, "tester")
+		ctx.Set(middleware.UserRoleContextKey, middleware.RoleAdmin)
+		ctx.Next()
+	})
+	handler.RegisterRoutes(router.Group("/prompts"))
+
+	// create prompt
+	createPayload := map[string]interface{}{"name": "Stats"}
+	createBody, _ := json.Marshal(createPayload)
+	req := httptest.NewRequest(http.MethodPost, "/prompts/", bytes.NewReader(createBody))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("create prompt failed: %d %s", rec.Code, rec.Body.String())
+	}
+
+	var resp struct {
+		Data struct {
+			Prompt struct {
+				ID string `json:"id"`
+			} `json:"prompt"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+
+	statsReq := httptest.NewRequest(http.MethodGet, "/prompts/"+resp.Data.Prompt.ID+"/stats", nil)
+	statsRec := httptest.NewRecorder()
+	router.ServeHTTP(statsRec, statsReq)
+	if statsRec.Code != http.StatusOK {
+		t.Fatalf("stats failed: %d %s", statsRec.Code, statsRec.Body.String())
+	}
+}

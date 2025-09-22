@@ -1,6 +1,9 @@
 package domain
 
-import "context"
+import (
+	"context"
+	"time"
+)
 
 // UserRepository 定义用户存取接口。
 type UserRepository interface {
@@ -29,6 +32,7 @@ type PromptVersionRepository interface {
 type PromptExecutionLogRepository interface {
 	Create(ctx context.Context, log *PromptExecutionLog) error
 	ListRecent(ctx context.Context, promptID string, limit int) ([]*PromptExecutionLog, error)
+	AggregateUsage(ctx context.Context, promptID string, from time.Time) ([]*PromptExecutionAggregate, error)
 }
 
 // Repositories 聚合全部仓储接口，便于依赖注入。

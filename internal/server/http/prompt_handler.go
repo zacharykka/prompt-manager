@@ -28,6 +28,7 @@ func (h *PromptHandler) RegisterRoutes(rg *gin.RouterGroup) {
 	rg.POST("/:id/versions", h.CreatePromptVersion)
 	rg.GET("/:id/versions", h.ListPromptVersions)
 	rg.POST("/:id/versions/:versionId/activate", h.SetActiveVersion)
+	rg.GET("/:id/stats", h.GetPromptStats)
 }
 
 type createPromptRequest struct {
@@ -145,6 +146,19 @@ func (h *PromptHandler) SetActiveVersion(ctx *gin.Context) {
 	httpx.RespondOK(ctx, gin.H{"prompt_id": promptID, "active_version_id": versionID})
 }
 
+// GetPromptStats 返回执行统计数据。
+func (h *PromptHandler) GetPromptStats(ctx *gin.Context) {
+	days := parseQueryInt(ctx.Query("days"), 7)
+
+	stats, err := h.service.GetExecutionStats(ctx, ctx.Param("id"), days)
+	if err != nil {
+		h.handleError(ctx, err)
+		return
+	}
+
+	httpx.RespondOK(ctx, gin.H{"items": stats})
+}
+
 func (h *PromptHandler) handleError(ctx *gin.Context, err error) {
 	switch err {
 	case promptsvc.ErrNameRequired, promptsvc.ErrBodyRequired:
@@ -175,4 +189,14 @@ func parsePagination(limitStr, offsetStr string) (int, int) {
 		}
 	}
 	return limit, offset
+}
+
+func parseQueryInt(value string, fallback int) int {
+	if value == "" {
+		return fallback
+	}
+	if v, err := strconv.Atoi(value); err == nil && v > 0 {
+		return v
+	}
+	return fallback
 }

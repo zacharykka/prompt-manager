@@ -54,3 +54,11 @@ type PromptExecutionLog struct {
 	ResponseMetadata json.RawMessage `json:"response_metadata,omitempty"`
 	CreatedAt        time.Time       `json:"created_at"`
 }
+
+// PromptExecutionAggregate 描述某一时间区间的统计信息。
+type PromptExecutionAggregate struct {
+	Day           time.Time `json:"day"`
+	TotalCalls    int       `json:"total_calls"`
+	SuccessCalls  int       `json:"success_calls"`
+	AverageMillis float64   `json:"average_ms"`
+}

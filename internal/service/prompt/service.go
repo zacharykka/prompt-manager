@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	domain "github.com/zacharykka/prompt-manager/internal/domain"
@@ -191,6 +192,24 @@ func (s *Service) SetActiveVersion(ctx context.Context, promptID, versionID stri
 	}
 
 	return s.repos.Prompts.UpdateActiveVersion(ctx, promptID, &versionID)
+}
+
+// GetExecutionStats 返回最近若干天的执行统计。
+func (s *Service) GetExecutionStats(ctx context.Context, promptID string, days int) ([]*domain.PromptExecutionAggregate, error) {
+	if days <= 0 {
+		days = 7
+	}
+
+	if _, err := s.GetPrompt(ctx, promptID); err != nil {
+		return nil, err
+	}
+
+	from := time.Now().AddDate(0, 0, -days)
+	stats, err := s.repos.PromptExecutionLog.AggregateUsage(ctx, promptID, from)
+	if err != nil {
+		return nil, err
+	}
+	return stats, nil
 }
 
 func optionalString(val string) *string {

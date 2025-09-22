@@ -166,4 +166,15 @@ func TestPromptRepositories_Workflow(t *testing.T) {
 	if logs[0].DurationMs != 120 {
 		t.Fatalf("unexpected duration: %d", logs[0].DurationMs)
 	}
+
+	stats, err := repos.PromptExecutionLog.AggregateUsage(ctx, promptID, time.Now().Add(-24*time.Hour))
+	if err != nil {
+		t.Fatalf("aggregate usage: %v", err)
+	}
+	if len(stats) != 1 {
+		t.Fatalf("expected 1 stat entry got %d", len(stats))
+	}
+	if stats[0].TotalCalls != 1 || stats[0].SuccessCalls != 1 {
+		t.Fatalf("unexpected stats %+v", stats[0])
+	}
 }

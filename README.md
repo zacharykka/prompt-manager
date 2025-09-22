@@ -106,6 +106,7 @@
 - `POST /api/v1/prompts/{id}/versions`：新增 Prompt 版本并可选设为激活。
 - `GET /api/v1/prompts/{id}/versions`：查看 Prompt 版本列表。
 - `POST /api/v1/prompts/{id}/versions/{versionId}/activate`：切换当前启用版本。
+- `GET /api/v1/prompts/{id}/stats`：查看最近若干天（默认 7 天）的执行统计。
 - 其余业务 API 将在后续里程碑逐步实现。
 
 ### 认证流程说明
