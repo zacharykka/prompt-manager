@@ -1,20 +1,22 @@
 package http
 
 import (
-	"bytes"
-	"database/sql"
-	"encoding/json"
-	"net/http"
-	"net/http/httptest"
-	"os"
-	"path/filepath"
-	"testing"
+    "bytes"
+    "database/sql"
+    "encoding/json"
+    "net/http"
+    "net/http/httptest"
+    "os"
+    "path/filepath"
+    "testing"
+    "time"
 
-	"github.com/gin-gonic/gin"
-	"github.com/zacharykka/prompt-manager/internal/config"
-	"github.com/zacharykka/prompt-manager/internal/infra/database"
-	"github.com/zacharykka/prompt-manager/internal/infra/repository"
-	"github.com/zacharykka/prompt-manager/internal/service/auth"
+    "github.com/gin-gonic/gin"
+    "github.com/zacharykka/prompt-manager/internal/config"
+    "github.com/zacharykka/prompt-manager/internal/infra/database"
+    "github.com/zacharykka/prompt-manager/internal/infra/repository"
+    "github.com/zacharykka/prompt-manager/internal/service/auth"
+    _ "modernc.org/sqlite"
 )
 
 func setupAuthHandler(t *testing.T) (*AuthHandler, func()) {
@@ -34,14 +36,23 @@ func setupAuthHandler(t *testing.T) (*AuthHandler, func()) {
 		t.Fatalf("exec migration: %v", err)
 	}
 
-	repos := repository.NewSQLRepositories(db, database.NewDialect("sqlite"))
-	svc := auth.NewService(repos, config.AuthConfig{
-		AccessTokenSecret:  "abcdefghijklmnopqrstuvwxyz123456",
-		RefreshTokenSecret: "abcdefghijklmnopqrstuvwxyz1234567890",
-		AccessTokenTTL:     15 * 60 * 1e9,
-		RefreshTokenTTL:    24 * 60 * 60 * 1e9,
-		APIKeyHashSecret:   "abcdefghijklmnopqrstuvwxyz098765",
-	})
+    schemaPath := filepath.Join("..", "..", "..", "db", "migrations", "000001_init.up.sql")
+    schema, err := os.ReadFile(schemaPath)
+    if err != nil {
+        t.Fatalf("read migration: %v", err)
+    }
+    if _, err := db.Exec(string(schema)); err != nil {
+        t.Fatalf("apply migration: %v", err)
+    }
+
+    repos := repository.NewSQLRepositories(db, database.NewDialect("sqlite"))
+    svc := auth.NewService(repos, config.AuthConfig{
+        AccessTokenSecret:  "abcdefghijklmnopqrstuvwxyz123456",
+        RefreshTokenSecret: "abcdefghijklmnopqrstuvwxyz1234567890",
+        AccessTokenTTL:     15 * time.Minute,
+        RefreshTokenTTL:    24 * time.Hour,
+        APIKeyHashSecret:   "abcdefghijklmnopqrstuvwxyz098765",
+    })
 	handler := NewAuthHandler(svc)
 
 	cleanup := func() { _ = db.Close() }
