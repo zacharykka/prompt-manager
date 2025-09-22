@@ -27,14 +27,14 @@ func (h *AuthHandler) RegisterRoutes(rg *gin.RouterGroup) {
 
 type registerRequest struct {
 	TenantID string `json:"tenant_id" binding:"required"`
-	Email    string `json:"email" binding:"required,email"`
+	Email    string `json:"email" binding:"required"`
 	Password string `json:"password" binding:"required,min=6"`
 	Role     string `json:"role"`
 }
 
 type loginRequest struct {
 	TenantID string `json:"tenant_id" binding:"required"`
-	Email    string `json:"email" binding:"required,email"`
+	Email    string `json:"email" binding:"required"`
 	Password string `json:"password" binding:"required"`
 }
 

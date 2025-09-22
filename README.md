@@ -57,6 +57,7 @@
    ```bash
    make test
    ```
+8. 默认管理员：首次启动会自动创建默认租户与管理员账号，凭据为 `tenant_id=default-tenant`、`email=admin`、`password=admin123`（部署后建议立即修改密码或关闭 `bootstrap.enabled`）。
 
 ## 使用 Docker 部署
 1. 准备环境变量：
@@ -93,6 +94,7 @@
 - **配置文件**：可通过 `--config-dir` 指定目录，使用 `--env` 或环境变量 `PROMPT_MANAGER_ENV` 切换环境。
 - **日志**：默认输出 JSON 到标准输出，级别由 `logging.level` 决定。
 - **迁移执行**：推荐在 CI/CD 或启动脚本中调用 `migrate` CLI；也可将迁移步骤编排入 `Makefile`（例如新增 `make migrate`）。
+- **默认管理员**：可通过 `bootstrap.*` 配置或环境变量 `PROMPT_MANAGER_BOOTSTRAP_*` 控制默认租户/管理员的启用、邮箱与密码；上线后建议关闭或改为自定义值。
 
 ## 当前可用 API
 - `GET /healthz`：返回服务状态、环境信息以及数据库/Redis 的健康详情。

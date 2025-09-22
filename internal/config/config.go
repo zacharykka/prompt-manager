@@ -21,12 +21,13 @@ const (
 
 // Config 聚合应用所需的全部配置项。
 type Config struct {
-	App      AppConfig      `mapstructure:"app"`
-	Server   ServerConfig   `mapstructure:"server"`
-	Database DatabaseConfig `mapstructure:"database"`
-	Redis    RedisConfig    `mapstructure:"redis"`
-	Auth     AuthConfig     `mapstructure:"auth"`
-	Logging  LoggingConfig  `mapstructure:"logging"`
+	App       AppConfig       `mapstructure:"app"`
+	Server    ServerConfig    `mapstructure:"server"`
+	Database  DatabaseConfig  `mapstructure:"database"`
+	Redis     RedisConfig     `mapstructure:"redis"`
+	Auth      AuthConfig      `mapstructure:"auth"`
+	Logging   LoggingConfig   `mapstructure:"logging"`
+	Bootstrap BootstrapConfig `mapstructure:"bootstrap"`
 }
 
 // AppConfig 描述应用级别的元信息。
@@ -74,6 +75,17 @@ type AuthConfig struct {
 // LoggingConfig 控制日志输出级别等行为。
 type LoggingConfig struct {
 	Level string `mapstructure:"level"`
+}
+
+// BootstrapConfig 控制默认租户与管理员的创建。
+type BootstrapConfig struct {
+	Enabled           bool   `mapstructure:"enabled"`
+	TenantID          string `mapstructure:"tenantID"`
+	TenantName        string `mapstructure:"tenantName"`
+	TenantDescription string `mapstructure:"tenantDescription"`
+	AdminEmail        string `mapstructure:"adminEmail"`
+	AdminPassword     string `mapstructure:"adminPassword"`
+	AdminRole         string `mapstructure:"adminRole"`
 }
 
 // Load 从给定路径加载配置；若 env 为空会自动读取环境变量或回退到默认值。
@@ -176,6 +188,24 @@ func applyDefaults(cfg *Config, env string) {
 	}
 	if cfg.Logging.Level == "" {
 		cfg.Logging.Level = "info"
+	}
+	if !cfg.Bootstrap.Enabled {
+		cfg.Bootstrap.Enabled = true
+	}
+	if cfg.Bootstrap.TenantID == "" {
+		cfg.Bootstrap.TenantID = "default-tenant"
+	}
+	if cfg.Bootstrap.TenantName == "" {
+		cfg.Bootstrap.TenantName = "Default Tenant"
+	}
+	if cfg.Bootstrap.AdminEmail == "" {
+		cfg.Bootstrap.AdminEmail = "admin"
+	}
+	if cfg.Bootstrap.AdminPassword == "" {
+		cfg.Bootstrap.AdminPassword = "admin123"
+	}
+	if cfg.Bootstrap.AdminRole == "" {
+		cfg.Bootstrap.AdminRole = "admin"
 	}
 }
 

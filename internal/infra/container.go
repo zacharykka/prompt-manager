@@ -7,6 +7,7 @@ import (
 	"github.com/redis/go-redis/v9"
 	"github.com/zacharykka/prompt-manager/internal/config"
 	"github.com/zacharykka/prompt-manager/internal/domain"
+	"github.com/zacharykka/prompt-manager/internal/infra/bootstrap"
 	"github.com/zacharykka/prompt-manager/internal/infra/cache"
 	"github.com/zacharykka/prompt-manager/internal/infra/database"
 	"github.com/zacharykka/prompt-manager/internal/infra/repository"
@@ -33,6 +34,11 @@ func Initialize(ctx context.Context, cfg *config.Config, logger *zap.Logger) (*C
 
 	dialect := database.NewDialect(cfg.Database.Driver)
 	container.Repos = repository.NewSQLRepositories(db, dialect)
+
+	if err := bootstrap.EnsureDefaultAdmin(ctx, container.Repos, cfg.Bootstrap, logger); err != nil {
+		_ = db.Close()
+		return nil, nil, err
+	}
 
 	redisClient, err := cache.New(ctx, cfg.Redis, logger)
 	if err != nil {
