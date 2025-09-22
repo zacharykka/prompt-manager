@@ -6,8 +6,10 @@ import (
 
 	"github.com/redis/go-redis/v9"
 	"github.com/zacharykka/prompt-manager/internal/config"
+	"github.com/zacharykka/prompt-manager/internal/domain"
 	"github.com/zacharykka/prompt-manager/internal/infra/cache"
 	"github.com/zacharykka/prompt-manager/internal/infra/database"
+	"github.com/zacharykka/prompt-manager/internal/infra/repository"
 	"go.uber.org/multierr"
 	"go.uber.org/zap"
 )
@@ -16,6 +18,7 @@ import (
 type Container struct {
 	DB    *sql.DB
 	Redis *redis.Client
+	Repos *domain.Repositories
 }
 
 // Initialize 构建各类依赖并返回关闭函数。
@@ -27,6 +30,9 @@ func Initialize(ctx context.Context, cfg *config.Config, logger *zap.Logger) (*C
 		return nil, nil, err
 	}
 	container.DB = db
+
+	dialect := database.NewDialect(cfg.Database.Driver)
+	container.Repos = repository.NewSQLRepositories(db, dialect)
 
 	redisClient, err := cache.New(ctx, cfg.Redis, logger)
 	if err != nil {

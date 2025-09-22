@@ -33,20 +33,56 @@
    git clone https://github.com/zacharykka/prompt-manager.git
    cd prompt-manager
    ```
-3. 安装依赖：
+3. 执行数据库迁移（首次运行或结构更新后）：
+   - SQLite（开发环境）：
+     ```bash
+     migrate -path db/migrations -database "sqlite3://$(pwd)/data/dev.db" up
+     ```
+   - PostgreSQL（生产环境示例）：
+     ```bash
+     migrate -path db/migrations -database "postgres://USER:PASSWORD@HOST:5432/prompt_manager?sslmode=disable" up
+     ```
+   若未安装 `migrate` CLI，可参阅 https://github.com/golang-migrate/migrate/tree/master/cmd/migrate
+4. 安装依赖：
    ```bash
    GOCACHE="$(pwd)/.cache/go-build" GOENV="$(pwd)/.config/go/env" go mod tidy
    ```
-4. 启动开发服务：
+5. 启动开发服务：
    ```bash
    make run
    ```
    默认读取 `config/default.yaml` 与 `config/development.yaml`，监听 `0.0.0.0:8080`。
-5. 健康检查：访问 `GET http://localhost:8080/healthz`，可查看服务/数据库/Redis 状态。
-6. 运行测试：
+6. 健康检查：访问 `GET http://localhost:8080/healthz`，可查看服务/数据库/Redis 状态。
+7. 运行测试：
    ```bash
    make test
    ```
+
+## 使用 Docker 部署
+1. 准备环境变量：
+   ```bash
+   cp .env.example .env
+   ```
+   根据需要修改访问令牌密钥、数据库口令等敏感信息。
+2. 构建并启动服务（包含 PostgreSQL、Redis 与自动迁移）：
+   ```bash
+   docker compose up --build
+   ```
+   首次启动时 `migrate` 服务会自动运行数据库迁移并退出，随后 `app` 服务将依赖已完成的迁移继续启动。
+3. 验证服务：
+   - API: `http://localhost:8080/healthz`
+   - PostgreSQL: `localhost:5432`
+   - Redis: `localhost:6379`
+4. 更新数据库结构时，可单独执行：
+   ```bash
+   docker compose run --rm migrate up
+   ```
+   若需回滚，可将 `up` 改为 `down 1` 等命令。
+5. 停止并移除：
+   ```bash
+   docker compose down
+   ```
+   若需要清理数据卷，追加 `-v` 参数。
 
 ## 运行时依赖与初始化
 - **数据库**：开发模式使用 `./data/dev.db`（自动创建）；生产模式需配置 PostgreSQL DSN，并调整连接池参数。
@@ -56,6 +92,7 @@
   ```
 - **配置文件**：可通过 `--config-dir` 指定目录，使用 `--env` 或环境变量 `PROMPT_MANAGER_ENV` 切换环境。
 - **日志**：默认输出 JSON 到标准输出，级别由 `logging.level` 决定。
+- **迁移执行**：推荐在 CI/CD 或启动脚本中调用 `migrate` CLI；也可将迁移步骤编排入 `Makefile`（例如新增 `make migrate`）。
 
 ## 当前可用 API
 - `GET /healthz`：返回服务状态、环境信息以及数据库/Redis 的健康详情。
