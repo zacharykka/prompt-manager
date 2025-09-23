@@ -198,9 +198,8 @@ export function PromptListSection({ onCreatePrompt, onEditPrompt }: PromptListSe
             </Button>
           </div>
         </div>
-        <div className="text-sm text-slate-500">
-          共 {meta.total ?? 0} 条记录
-          {queryState.search ? `，关键词 “${queryState.search}”` : ''}
+        <div className="flex-shrink-0 text-sm font-medium text-slate-500 whitespace-nowrap md:text-base">
+          共 {meta.total ?? 0} 条记录{queryState.search ? `，关键词 “${queryState.search}”` : ''}
         </div>
       </form>
 
