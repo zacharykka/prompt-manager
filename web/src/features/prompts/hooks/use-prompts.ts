@@ -7,7 +7,7 @@ export function usePromptsQuery(params: PromptListParams = {}) {
   return useQuery({
     queryKey: ['prompts', params],
     queryFn: () => listPrompts(params),
-    staleTime: 60_000,
+    staleTime: params.includeDeleted ? 0 : 60_000,
     placeholderData: (previousData) => previousData,
   })
 }
