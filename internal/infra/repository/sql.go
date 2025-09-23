@@ -210,6 +210,56 @@ WHERE p.id = %s AND p.deleted_at IS NULL`, ph.Next())
 	return prompt, nil
 }
 
+func (r *promptRepository) GetByName(ctx context.Context, name string, includeDeleted bool) (*domain.Prompt, error) {
+	ph := database.NewPlaceholderBuilder(r.dialect)
+	query := fmt.Sprintf(`SELECT p.id, p.name, p.description, p.tags, p.active_version_id, p.body, p.created_by, u.email, p.status, p.deleted_at, p.created_at, p.updated_at
+FROM prompts p
+LEFT JOIN users u ON p.created_by = u.id
+WHERE LOWER(p.name) = LOWER(%s)`, ph.Next())
+
+	if !includeDeleted {
+		query += " AND p.deleted_at IS NULL"
+	}
+
+	var row promptRow
+	err := r.db.QueryRowContext(ctx, query, name).Scan(&row.id, &row.name, &row.description, &row.tags, &row.activeVersionID, &row.body, &row.createdBy, &row.createdByEmail, &row.status, &row.deletedAt, &row.createdAt, &row.updatedAt)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, domain.ErrNotFound
+		}
+		return nil, err
+	}
+
+	prompt := &domain.Prompt{
+		ID:        row.id,
+		Name:      row.name,
+		CreatedAt: row.createdAt,
+		UpdatedAt: row.updatedAt,
+		Status:    row.status,
+	}
+	if row.description.Valid {
+		prompt.Description = &row.description.String
+	}
+	if row.tags.Valid {
+		prompt.Tags = json.RawMessage(row.tags.String)
+	}
+	if row.activeVersionID.Valid {
+		prompt.ActiveVersionID = &row.activeVersionID.String
+	}
+	if row.body.Valid {
+		prompt.Body = &row.body.String
+	}
+	if row.createdByEmail.Valid {
+		prompt.CreatedBy = &row.createdByEmail.String
+	} else if row.createdBy.Valid {
+		prompt.CreatedBy = &row.createdBy.String
+	}
+	if row.deletedAt.Valid {
+		prompt.DeletedAt = &row.deletedAt.Time
+	}
+	return prompt, nil
+}
+
 func (r *promptRepository) List(ctx context.Context, opts domain.PromptListOptions) ([]*domain.Prompt, error) {
 	limit := opts.Limit
 	if limit <= 0 {
@@ -406,6 +456,49 @@ func (r *promptRepository) Delete(ctx context.Context, promptID string) error {
 	query := fmt.Sprintf(`UPDATE prompts SET status = 'deleted', deleted_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = %s AND deleted_at IS NULL`, ph.Next())
 
 	result, err := r.db.ExecContext(ctx, query, promptID)
+	if err != nil {
+		return err
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rows == 0 {
+		return domain.ErrNotFound
+	}
+	return nil
+}
+
+func (r *promptRepository) Restore(ctx context.Context, promptID string, params domain.PromptRestoreParams) error {
+	ph := database.NewPlaceholderBuilder(r.dialect)
+	query := fmt.Sprintf(`UPDATE prompts
+SET description = %s,
+    tags = %s,
+    created_by = %s,
+    body = %s,
+    status = 'active',
+    deleted_at = NULL,
+    updated_at = CURRENT_TIMESTAMP
+WHERE id = %s`, ph.Next(), ph.Next(), ph.Next(), ph.Next(), ph.Next())
+
+	description := sql.NullString{}
+	if params.Description != nil {
+		description = sql.NullString{String: *params.Description, Valid: true}
+	}
+	tags := sql.NullString{}
+	if params.Tags != nil {
+		tags = sql.NullString{String: *params.Tags, Valid: true}
+	}
+	createdBy := sql.NullString{}
+	if params.CreatedBy != nil {
+		createdBy = sql.NullString{String: *params.CreatedBy, Valid: true}
+	}
+	body := sql.NullString{}
+	if params.Body != nil {
+		body = sql.NullString{String: *params.Body, Valid: true}
+	}
+
+	result, err := r.db.ExecContext(ctx, query, description, tags, createdBy, body, promptID)
 	if err != nil {
 		return err
 	}

@@ -16,11 +16,13 @@ type UserRepository interface {
 type PromptRepository interface {
 	Create(ctx context.Context, prompt *Prompt) error
 	GetByID(ctx context.Context, promptID string) (*Prompt, error)
+	GetByName(ctx context.Context, name string, includeDeleted bool) (*Prompt, error)
 	List(ctx context.Context, opts PromptListOptions) ([]*Prompt, error)
 	Count(ctx context.Context, opts PromptListOptions) (int64, error)
 	UpdateActiveVersion(ctx context.Context, promptID string, versionID *string, body *string) error
 	Update(ctx context.Context, promptID string, params PromptUpdateParams) error
 	Delete(ctx context.Context, promptID string) error
+	Restore(ctx context.Context, promptID string, params PromptRestoreParams) error
 }
 
 // PromptVersionRepository 定义 Prompt 版本存取接口。
@@ -69,4 +71,12 @@ type PromptUpdateParams struct {
 	HasName        bool
 	HasDescription bool
 	HasTags        bool
+}
+
+// PromptRestoreParams 描述 Prompt 恢复时需要更新的字段。
+type PromptRestoreParams struct {
+	Description *string
+	Tags        *string
+	CreatedBy   *string
+	Body        *string
 }

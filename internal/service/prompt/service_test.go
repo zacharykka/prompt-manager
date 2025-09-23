@@ -310,3 +310,41 @@ func TestDeletePrompt(t *testing.T) {
 		t.Fatalf("expected ErrPromptNotFound on second delete got %v", err)
 	}
 }
+
+func TestCreatePromptAfterSoftDelete(t *testing.T) {
+	svc, cleanup := setupPromptService(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	desc := "First"
+	prompt, err := svc.CreatePrompt(ctx, CreatePromptInput{Name: "Reusable", Description: &desc, CreatedBy: "first@example.com"})
+	if err != nil {
+		t.Fatalf("create prompt: %v", err)
+	}
+
+	if err := svc.DeletePrompt(ctx, prompt.ID, "tester@example.com"); err != nil {
+		t.Fatalf("delete prompt: %v", err)
+	}
+
+	secondDesc := "Second"
+	recreated, err := svc.CreatePrompt(ctx, CreatePromptInput{
+		Name:        "Reusable",
+		Description: &secondDesc,
+		CreatedBy:   "second@example.com",
+	})
+	if err != nil {
+		t.Fatalf("recreate prompt: %v", err)
+	}
+	if recreated == nil {
+		t.Fatalf("expected recreated prompt")
+	}
+	if recreated.Status != "active" {
+		t.Fatalf("expected status active got %s", recreated.Status)
+	}
+	if recreated.DeletedAt != nil {
+		t.Fatalf("expected deleted_at cleared")
+	}
+	if recreated.Name != "Reusable" {
+		t.Fatalf("unexpected name %s", recreated.Name)
+	}
+}

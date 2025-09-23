@@ -123,6 +123,17 @@ func TestPromptRepositories_Workflow(t *testing.T) {
 		t.Fatalf("unexpected tags: %s", storedPrompt.Tags)
 	}
 
+	byName, err := repos.Prompts.GetByName(ctx, "Prompt-A", false)
+	if err != nil {
+		t.Fatalf("get by name active: %v", err)
+	}
+	if byName.ID != promptID {
+		t.Fatalf("expected id %s got %s", promptID, byName.ID)
+	}
+	if byName.Status != "active" {
+		t.Fatalf("expected status active got %s", byName.Status)
+	}
+
 	versionID := uuid.NewString()
 	schema := json.RawMessage(`{"vars":[{"name":"city"}]}`)
 	version := &domain.PromptVersion{
@@ -204,8 +215,39 @@ func TestPromptRepositories_Workflow(t *testing.T) {
 	if _, err := repos.Prompts.GetByID(ctx, promptID); err != domain.ErrNotFound {
 		t.Fatalf("expected ErrNotFound after delete got %v", err)
 	}
+	deletedByName, err := repos.Prompts.GetByName(ctx, "Prompt-A", true)
+	if err != nil {
+		t.Fatalf("get by name include deleted: %v", err)
+	}
+	if deletedByName.Status != "deleted" {
+		t.Fatalf("expected deleted status got %s", deletedByName.Status)
+	}
+	if deletedByName.DeletedAt == nil {
+		t.Fatalf("expected deleted_at to be set")
+	}
+
+	if err := repos.Prompts.Restore(ctx, promptID, domain.PromptRestoreParams{}); err != nil {
+		t.Fatalf("restore prompt: %v", err)
+	}
+	restoredAfter, err := repos.Prompts.GetByID(ctx, promptID)
+	if err != nil {
+		t.Fatalf("get restored prompt: %v", err)
+	}
+	if restoredAfter.Status != "active" {
+		t.Fatalf("expected active status got %s", restoredAfter.Status)
+	}
+	if restoredAfter.DeletedAt != nil {
+		t.Fatalf("expected deleted_at cleared")
+	}
+	if err := repos.Prompts.Delete(ctx, promptID); err != nil {
+		t.Fatalf("delete after restore: %v", err)
+	}
+	if _, err := repos.Prompts.GetByID(ctx, promptID); err != domain.ErrNotFound {
+		t.Fatalf("expected ErrNotFound after second delete got %v", err)
+	}
+
 	if err := repos.Prompts.Delete(ctx, promptID); err != domain.ErrNotFound {
-		t.Fatalf("expected ErrNotFound on second delete got %v", err)
+		t.Fatalf("expected ErrNotFound on repeated delete got %v", err)
 	}
 	listed, err := repos.Prompts.List(ctx, domain.PromptListOptions{Limit: 10})
 	if err != nil {

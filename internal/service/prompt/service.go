@@ -53,28 +53,70 @@ func (s *Service) CreatePrompt(ctx context.Context, input CreatePromptInput) (*d
 		tagsJSON = data
 	}
 
-	prompt := &domain.Prompt{
-		ID:        uuid.NewString(),
-		Name:      name,
-		Tags:      tagsJSON,
-		CreatedBy: optionalString(input.CreatedBy),
-	}
-	prompt.Description = optionalTrimmedString(input.Description)
-
-	if err := s.repos.Prompts.Create(ctx, prompt); err != nil {
-		if isUniqueViolation(err) {
-			return nil, ErrPromptAlreadyExists
-		}
+	existing, err := s.repos.Prompts.GetByName(ctx, name, true)
+	if err != nil && !errors.Is(err, domain.ErrNotFound) {
 		return nil, err
 	}
 
-	created, err := s.repos.Prompts.GetByID(ctx, prompt.ID)
-	if err != nil {
-		if errors.Is(err, domain.ErrNotFound) {
-			return nil, ErrPromptNotFound
+	createdBy := optionalString(input.CreatedBy)
+	description := optionalTrimmedString(input.Description)
+
+	var created *domain.Prompt
+
+	if existing != nil && existing.Status == "deleted" {
+		restoreParams := domain.PromptRestoreParams{
+			Description: description,
+			CreatedBy:   createdBy,
 		}
-		return nil, err
+		if len(tagsJSON) > 0 {
+			tagsStr := string(tagsJSON)
+			restoreParams.Tags = &tagsStr
+		}
+		restoreParams.Body = nil
+
+		if err := s.repos.Prompts.Restore(ctx, existing.ID, restoreParams); err != nil {
+			return nil, err
+		}
+
+		restored, err := s.repos.Prompts.GetByID(ctx, existing.ID)
+		if err != nil {
+			if errors.Is(err, domain.ErrNotFound) {
+				return nil, ErrPromptNotFound
+			}
+			return nil, err
+		}
+		created = restored
+	} else if existing != nil {
+		return nil, ErrPromptAlreadyExists
+	} else {
+		prompt := &domain.Prompt{
+			ID:        uuid.NewString(),
+			Name:      name,
+			Tags:      tagsJSON,
+			CreatedBy: createdBy,
+		}
+		prompt.Description = description
+
+		if err := s.repos.Prompts.Create(ctx, prompt); err != nil {
+			if isUniqueViolation(err) {
+				return nil, ErrPromptAlreadyExists
+			}
+			return nil, err
+		}
+
+		created, err = s.repos.Prompts.GetByID(ctx, prompt.ID)
+		if err != nil {
+			if errors.Is(err, domain.ErrNotFound) {
+				return nil, ErrPromptNotFound
+			}
+			return nil, err
+		}
 	}
+
+	if created == nil {
+		return nil, ErrPromptNotFound
+	}
+
 	return created, nil
 }
 
