@@ -10,6 +10,8 @@ interface PromptTableProps {
   deletingPromptId?: string | null
   disableActions?: boolean
   onEditPrompt?: (prompt: Prompt) => void
+  onRestorePrompt?: (prompt: Prompt) => void | Promise<void>
+  restoringPromptId?: string | null
 }
 
 export function PromptTable({
@@ -18,7 +20,11 @@ export function PromptTable({
   deletingPromptId,
   disableActions = false,
   onEditPrompt,
+  onRestorePrompt,
+  restoringPromptId,
 }: PromptTableProps) {
+  const showActions = Boolean(onDeletePrompt) || Boolean(onRestorePrompt)
+
   return (
     <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
       <table className="min-w-full divide-y divide-slate-200">
@@ -30,7 +36,7 @@ export function PromptTable({
             <th scope="col" className="px-4 py-3 text-center whitespace-nowrap">状态</th>
             <th scope="col" className="px-4 py-3 text-center whitespace-nowrap">更新人</th>
             <th scope="col" className="px-4 py-3 text-center whitespace-nowrap">更新时间</th>
-            {onDeletePrompt ? (
+            {showActions ? (
               <th scope="col" className="px-4 py-3 text-center whitespace-nowrap">操作</th>
             ) : null}
           </tr>
@@ -93,16 +99,32 @@ export function PromptTable({
               <td className="px-4 py-3 text-xs text-slate-500 text-center whitespace-nowrap align-middle">
                 {format(new Date(prompt.updatedAt), 'yyyy-MM-dd HH:mm')}
               </td>
-              {onDeletePrompt ? (
+              {showActions ? (
                 <td className="px-4 py-3 text-center whitespace-nowrap align-middle">
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => onDeletePrompt(prompt)}
-                    disabled={disableActions || deletingPromptId === prompt.id}
-                  >
-                    {deletingPromptId === prompt.id ? '删除中...' : '删除'}
-                  </Button>
+                  <div className="flex items-center justify-center gap-2">
+                    {onRestorePrompt ? (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => {
+                          void onRestorePrompt(prompt)
+                        }}
+                        disabled={disableActions || restoringPromptId === prompt.id}
+                      >
+                        {restoringPromptId === prompt.id ? '恢复中...' : '恢复'}
+                      </Button>
+                    ) : null}
+                    {onDeletePrompt ? (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => onDeletePrompt(prompt)}
+                        disabled={disableActions || deletingPromptId === prompt.id}
+                      >
+                        {deletingPromptId === prompt.id ? '删除中...' : '删除'}
+                      </Button>
+                    ) : null}
+                  </div>
                 </td>
               ) : null}
             </tr>

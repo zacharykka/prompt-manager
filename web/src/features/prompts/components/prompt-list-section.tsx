@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input'
 import { PromptTable } from '@/features/prompts/components/prompt-table'
 import { DeletePromptDialog } from '@/features/prompts/components/delete-prompt-dialog'
 import { deletePrompt } from '@/features/prompts/api/delete-prompt'
+import { restorePrompt } from '@/features/prompts/api/restore-prompt'
 import { usePromptsQuery } from '@/features/prompts/hooks/use-prompts'
 import type { Prompt } from '@/features/prompts/types'
 
@@ -35,6 +36,7 @@ export function PromptListSection({ onCreatePrompt, onEditPrompt }: PromptListSe
   >(null)
   const [deleteTarget, setDeleteTarget] = useState<Prompt | null>(null)
   const [deleteError, setDeleteError] = useState<string | null>(null)
+  const [restoringPromptId, setRestoringPromptId] = useState<string | null>(null)
 
   const queryClient = useQueryClient()
 
@@ -139,6 +141,16 @@ export function PromptListSection({ onCreatePrompt, onEditPrompt }: PromptListSe
     },
   })
 
+  const {
+    mutateAsync: restorePromptAsync,
+    isPending: isRestoring,
+  } = useMutation({
+    mutationFn: (promptId: string) => restorePrompt(promptId),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['prompts'] })
+    },
+  })
+
   const handleDeletePrompt = (prompt: Prompt) => {
     setDeleteError(null)
     setDeleteTarget(prompt)
@@ -157,6 +169,19 @@ export function PromptListSection({ onCreatePrompt, onEditPrompt }: PromptListSe
       const message = parseDeleteError(error)
       setDeleteError(message)
       setFeedback({ type: 'error', message })
+    }
+  }
+
+  const handleRestorePrompt = async (prompt: Prompt) => {
+    setRestoringPromptId(prompt.id)
+    try {
+      await restorePromptAsync(prompt.id)
+      setFeedback({ type: 'success', message: `Prompt “${prompt.name}” 已恢复。` })
+    } catch (error) {
+      const message = parseRestoreError(error)
+      setFeedback({ type: 'error', message })
+    } finally {
+      setRestoringPromptId(null)
     }
   }
 
@@ -253,7 +278,9 @@ export function PromptListSection({ onCreatePrompt, onEditPrompt }: PromptListSe
             prompts={filteredItems}
             onDeletePrompt={view === 'deleted' ? undefined : handleDeletePrompt}
             deletingPromptId={isDeleting ? deleteTarget?.id ?? null : null}
-            disableActions={isDeleting || view === 'deleted'}
+            onRestorePrompt={view === 'deleted' ? handleRestorePrompt : undefined}
+            restoringPromptId={restoringPromptId}
+            disableActions={isDeleting || isRestoring}
             onEditPrompt={view === 'deleted' ? undefined : onEditPrompt}
           />
           {view === 'deleted' ? null : (
@@ -334,6 +361,25 @@ function parseDeleteError(error: unknown): string {
     axiosError?.response?.data?.message ??
     axiosError?.message ??
     '删除 Prompt 失败，请稍后重试。'
+  )
+}
+
+function parseRestoreError(error: unknown): string {
+  const axiosError = error as AxiosError<{ message?: string }> | undefined
+  const status = axiosError?.response?.status
+  if (status === 404) {
+    return '目标 Prompt 不存在或已经被永久移除。'
+  }
+  if (status === 400) {
+    return '该 Prompt 当前未处于删除状态，无需恢复。'
+  }
+  if (status === 403) {
+    return '您没有权限恢复该 Prompt，请联系管理员。'
+  }
+  return (
+    axiosError?.response?.data?.message ??
+    axiosError?.message ??
+    '恢复 Prompt 失败，请稍后重试。'
   )
 }
 
