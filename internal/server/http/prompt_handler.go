@@ -66,7 +66,10 @@ func (h *PromptHandler) CreatePrompt(ctx *gin.Context) {
 		return
 	}
 
-	createdBy := ctx.GetString(middleware.UserContextKey)
+	createdBy := ctx.GetString(middleware.UserEmailContextKey)
+	if createdBy == "" {
+		createdBy = ctx.GetString(middleware.UserContextKey)
+	}
 
 	prompt, err := h.service.CreatePrompt(ctx, promptsvc.CreatePromptInput{
 		Name:        req.Name,
@@ -173,7 +176,10 @@ func (h *PromptHandler) CreatePromptVersion(ctx *gin.Context) {
 		return
 	}
 
-	createdBy := ctx.GetString(middleware.UserContextKey)
+	createdBy := ctx.GetString(middleware.UserEmailContextKey)
+	if createdBy == "" {
+		createdBy = ctx.GetString(middleware.UserContextKey)
+	}
 
 	version, err := h.service.CreatePromptVersion(ctx, promptsvc.CreatePromptVersionInput{
 		PromptID:        ctx.Param("id"),
@@ -233,7 +239,10 @@ func (h *PromptHandler) GetPromptStats(ctx *gin.Context) {
 
 // DeletePrompt 删除指定 Prompt。
 func (h *PromptHandler) DeletePrompt(ctx *gin.Context) {
-	deletedBy := ctx.GetString(middleware.UserContextKey)
+	deletedBy := ctx.GetString(middleware.UserEmailContextKey)
+	if deletedBy == "" {
+		deletedBy = ctx.GetString(middleware.UserContextKey)
+	}
 	if err := h.service.DeletePrompt(ctx, ctx.Param("id"), deletedBy); err != nil {
 		h.handleError(ctx, err)
 		return

@@ -6,7 +6,7 @@ import type {
   PromptListResult,
 } from '@/features/prompts/types'
 
-type RawPrompt = {
+export type RawPrompt = {
   id: string
   name: string
   description?: string | null

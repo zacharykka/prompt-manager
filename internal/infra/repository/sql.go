@@ -127,6 +127,7 @@ type promptRow struct {
 	activeVersionID sql.NullString
 	body            sql.NullString
 	createdBy       sql.NullString
+	createdByEmail  sql.NullString
 	status          string
 	deletedAt       sql.NullTime
 	createdAt       time.Time
@@ -165,11 +166,13 @@ VALUES (%s, %s, %s, %s, %s, %s, %s)`, ph.Next(), ph.Next(), ph.Next(), ph.Next()
 
 func (r *promptRepository) GetByID(ctx context.Context, promptID string) (*domain.Prompt, error) {
 	ph := database.NewPlaceholderBuilder(r.dialect)
-	query := fmt.Sprintf(`SELECT id, name, description, tags, active_version_id, body, created_by, status, deleted_at, created_at, updated_at
-FROM prompts WHERE id = %s AND deleted_at IS NULL`, ph.Next())
+	query := fmt.Sprintf(`SELECT p.id, p.name, p.description, p.tags, p.active_version_id, p.body, p.created_by, u.email, p.status, p.deleted_at, p.created_at, p.updated_at
+FROM prompts p
+LEFT JOIN users u ON p.created_by = u.id
+WHERE p.id = %s AND p.deleted_at IS NULL`, ph.Next())
 
 	var row promptRow
-	err := r.db.QueryRowContext(ctx, query, promptID).Scan(&row.id, &row.name, &row.description, &row.tags, &row.activeVersionID, &row.body, &row.createdBy, &row.status, &row.deletedAt, &row.createdAt, &row.updatedAt)
+	err := r.db.QueryRowContext(ctx, query, promptID).Scan(&row.id, &row.name, &row.description, &row.tags, &row.activeVersionID, &row.body, &row.createdBy, &row.createdByEmail, &row.status, &row.deletedAt, &row.createdAt, &row.updatedAt)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, domain.ErrNotFound
@@ -196,7 +199,9 @@ FROM prompts WHERE id = %s AND deleted_at IS NULL`, ph.Next())
 	if row.body.Valid {
 		prompt.Body = &row.body.String
 	}
-	if row.createdBy.Valid {
+	if row.createdByEmail.Valid {
+		prompt.CreatedBy = &row.createdByEmail.String
+	} else if row.createdBy.Valid {
 		prompt.CreatedBy = &row.createdBy.String
 	}
 	if row.deletedAt.Valid {
@@ -221,13 +226,14 @@ func (r *promptRepository) List(ctx context.Context, opts domain.PromptListOptio
 	var args []interface{}
 	var conditions []string
 
-	builder.WriteString(`SELECT id, name, description, tags, active_version_id, body, created_by, status, deleted_at, created_at, updated_at FROM prompts`)
+	builder.WriteString(`SELECT p.id, p.name, p.description, p.tags, p.active_version_id, p.body, p.created_by, u.email, p.status, p.deleted_at, p.created_at, p.updated_at FROM prompts p`)
+	builder.WriteString(" LEFT JOIN users u ON p.created_by = u.id")
 
 	if !opts.IncludeDeleted {
-		conditions = append(conditions, "deleted_at IS NULL")
+		conditions = append(conditions, "p.deleted_at IS NULL")
 	}
 	if search != "" {
-		conditions = append(conditions, fmt.Sprintf("LOWER(name) LIKE %s", ph.Next()))
+		conditions = append(conditions, fmt.Sprintf("LOWER(p.name) LIKE %s", ph.Next()))
 		args = append(args, fmt.Sprintf("%%%s%%", search))
 	}
 
@@ -236,7 +242,7 @@ func (r *promptRepository) List(ctx context.Context, opts domain.PromptListOptio
 		builder.WriteString(strings.Join(conditions, " AND "))
 	}
 
-	builder.WriteString(" ORDER BY updated_at DESC LIMIT ")
+	builder.WriteString(" ORDER BY p.updated_at DESC LIMIT ")
 	builder.WriteString(ph.Next())
 	builder.WriteString(" OFFSET ")
 	builder.WriteString(ph.Next())
@@ -252,7 +258,7 @@ func (r *promptRepository) List(ctx context.Context, opts domain.PromptListOptio
 	var prompts []*domain.Prompt
 	for rows.Next() {
 		var row promptRow
-		if err := rows.Scan(&row.id, &row.name, &row.description, &row.tags, &row.activeVersionID, &row.body, &row.createdBy, &row.status, &row.deletedAt, &row.createdAt, &row.updatedAt); err != nil {
+		if err := rows.Scan(&row.id, &row.name, &row.description, &row.tags, &row.activeVersionID, &row.body, &row.createdBy, &row.createdByEmail, &row.status, &row.deletedAt, &row.createdAt, &row.updatedAt); err != nil {
 			return nil, err
 		}
 		prompt := &domain.Prompt{
@@ -274,7 +280,9 @@ func (r *promptRepository) List(ctx context.Context, opts domain.PromptListOptio
 		if row.body.Valid {
 			prompt.Body = &row.body.String
 		}
-		if row.createdBy.Valid {
+		if row.createdByEmail.Valid {
+			prompt.CreatedBy = &row.createdByEmail.String
+		} else if row.createdBy.Valid {
 			prompt.CreatedBy = &row.createdBy.String
 		}
 		if row.deletedAt.Valid {
@@ -322,12 +330,12 @@ func (r *promptRepository) Count(ctx context.Context, opts domain.PromptListOpti
 	var args []interface{}
 	var conditions []string
 
-	builder.WriteString("SELECT COUNT(1) FROM prompts")
+	builder.WriteString("SELECT COUNT(1) FROM prompts p")
 	if !opts.IncludeDeleted {
-		conditions = append(conditions, "deleted_at IS NULL")
+		conditions = append(conditions, "p.deleted_at IS NULL")
 	}
 	if search != "" {
-		conditions = append(conditions, fmt.Sprintf("LOWER(name) LIKE %s", ph.Next()))
+		conditions = append(conditions, fmt.Sprintf("LOWER(p.name) LIKE %s", ph.Next()))
 		args = append(args, fmt.Sprintf("%%%s%%", search))
 	}
 	if len(conditions) > 0 {

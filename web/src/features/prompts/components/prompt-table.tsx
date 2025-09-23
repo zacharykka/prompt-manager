@@ -9,6 +9,7 @@ interface PromptTableProps {
   onDeletePrompt?: (prompt: Prompt) => void
   deletingPromptId?: string | null
   disableActions?: boolean
+  onEditPrompt?: (prompt: Prompt) => void
 }
 
 export function PromptTable({
@@ -16,6 +17,7 @@ export function PromptTable({
   onDeletePrompt,
   deletingPromptId,
   disableActions = false,
+  onEditPrompt,
 }: PromptTableProps) {
   return (
     <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
@@ -38,7 +40,17 @@ export function PromptTable({
             <tr key={prompt.id} className="text-sm text-slate-700">
               <td className="max-w-xs px-4 py-3">
                 <div className="flex flex-col gap-1">
-                  <span className="truncate font-medium text-slate-900">{prompt.name}</span>
+                  {onEditPrompt ? (
+                    <button
+                      type="button"
+                      onClick={() => onEditPrompt(prompt)}
+                      className="truncate text-left font-medium text-brand-600 hover:underline"
+                    >
+                      {prompt.name}
+                    </button>
+                  ) : (
+                    <span className="truncate font-medium text-slate-900">{prompt.name}</span>
+                  )}
                   {prompt.description ? (
                     <span className="truncate text-xs text-slate-500">
                       {prompt.description}

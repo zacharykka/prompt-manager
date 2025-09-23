@@ -1,4 +1,5 @@
-import { useState, type FormEvent } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import type { AxiosError } from 'axios'
 
@@ -16,9 +17,12 @@ type PromptView = 'active' | 'deleted'
 
 interface PromptListSectionProps {
   onCreatePrompt?: () => void
+  onEditPrompt?: (prompt: Prompt) => void
 }
 
-export function PromptListSection({ onCreatePrompt }: PromptListSectionProps) {
+export function PromptListSection({ onCreatePrompt, onEditPrompt }: PromptListSectionProps) {
+  const location = useLocation()
+  const navigate = useNavigate()
   const [searchInput, setSearchInput] = useState('')
   const [queryState, setQueryState] = useState({ search: '', offset: 0 })
   const [view, setView] = useState<PromptView>('active')
@@ -33,6 +37,14 @@ export function PromptListSection({ onCreatePrompt }: PromptListSectionProps) {
   const [deleteError, setDeleteError] = useState<string | null>(null)
 
   const queryClient = useQueryClient()
+
+  useEffect(() => {
+    const state = location.state as { feedback?: { type: 'success' | 'error'; message: string } } | undefined
+    if (state?.feedback) {
+      setFeedback(state.feedback)
+      navigate(location.pathname + location.search, { replace: true })
+    }
+  }, [location, navigate])
 
   const {
     data,
@@ -233,6 +245,7 @@ export function PromptListSection({ onCreatePrompt }: PromptListSectionProps) {
             onDeletePrompt={view === 'deleted' ? undefined : handleDeletePrompt}
             deletingPromptId={isDeleting ? deleteTarget?.id ?? null : null}
             disableActions={isDeleting || view === 'deleted'}
+            onEditPrompt={view === 'deleted' ? undefined : onEditPrompt}
           />
           {view === 'deleted' ? null : (
             <div className="flex flex-col gap-3 border-t border-slate-200 pt-4 md:flex-row md:items-center md:justify-between">

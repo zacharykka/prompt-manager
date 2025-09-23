@@ -65,7 +65,8 @@ func TestPromptHandler_CreateAndList(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
 	router.Use(func(ctx *gin.Context) {
-		ctx.Set(middleware.UserContextKey, "tester")
+		ctx.Set(middleware.UserContextKey, "tester-id")
+		ctx.Set(middleware.UserEmailContextKey, "tester@example.com")
 		ctx.Set(middleware.UserRoleContextKey, middleware.RoleAdmin)
 		ctx.Next()
 	})
@@ -133,7 +134,8 @@ func TestPromptHandler_CreateVersion(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
 	router.Use(func(ctx *gin.Context) {
-		ctx.Set(middleware.UserContextKey, "tester")
+		ctx.Set(middleware.UserContextKey, "tester-id")
+		ctx.Set(middleware.UserEmailContextKey, "tester@example.com")
 		ctx.Set(middleware.UserRoleContextKey, middleware.RoleAdmin)
 		ctx.Next()
 	})
@@ -187,7 +189,8 @@ func TestPromptHandler_Update(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
 	router.Use(func(ctx *gin.Context) {
-		ctx.Set(middleware.UserContextKey, "tester")
+		ctx.Set(middleware.UserContextKey, "tester-id")
+		ctx.Set(middleware.UserEmailContextKey, "tester@example.com")
 		ctx.Set(middleware.UserRoleContextKey, middleware.RoleAdmin)
 		ctx.Next()
 	})
@@ -267,7 +270,8 @@ func TestPromptHandler_Delete(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
 	router.Use(func(ctx *gin.Context) {
-		ctx.Set(middleware.UserContextKey, "tester")
+		ctx.Set(middleware.UserContextKey, "tester-id")
+		ctx.Set(middleware.UserEmailContextKey, "tester@example.com")
 		ctx.Set(middleware.UserRoleContextKey, middleware.RoleAdmin)
 		ctx.Next()
 	})
@@ -316,7 +320,8 @@ func TestPromptHandler_GetStats(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
 	router.Use(func(ctx *gin.Context) {
-		ctx.Set(middleware.UserContextKey, "tester")
+		ctx.Set(middleware.UserContextKey, "tester-id")
+		ctx.Set(middleware.UserEmailContextKey, "tester@example.com")
 		ctx.Set(middleware.UserRoleContextKey, middleware.RoleAdmin)
 		ctx.Next()
 	})

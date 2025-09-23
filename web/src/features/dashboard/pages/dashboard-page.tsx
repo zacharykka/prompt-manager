@@ -1,11 +1,9 @@
-import { useState } from 'react'
-
 import { Button } from '@/components/ui/button'
-import { CreatePromptModal } from '@/features/prompts/components/create-prompt-modal'
 import { PromptListSection } from '@/features/prompts/components/prompt-list-section'
+import { useNavigate } from 'react-router-dom'
 
 export function DashboardPage() {
-  const [createOpen, setCreateOpen] = useState(false)
+  const navigate = useNavigate()
 
   return (
     <>
@@ -18,7 +16,7 @@ export function DashboardPage() {
             </p>
           </div>
           <div className="flex items-center gap-3">
-            <Button type="button" onClick={() => setCreateOpen(true)}>
+            <Button type="button" onClick={() => navigate('/prompts/new')}>
               新建 Prompt
             </Button>
             <Button type="button" variant="secondary">
@@ -27,10 +25,11 @@ export function DashboardPage() {
           </div>
         </header>
 
-        <PromptListSection onCreatePrompt={() => setCreateOpen(true)} />
+        <PromptListSection
+          onCreatePrompt={() => navigate('/prompts/new')}
+          onEditPrompt={(prompt) => navigate(`/prompts/${prompt.id}/edit`)}
+        />
       </section>
-
-      <CreatePromptModal open={createOpen} onClose={() => setCreateOpen(false)} />
     </>
   )
 }

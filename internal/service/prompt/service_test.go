@@ -284,7 +284,7 @@ func TestDeletePrompt(t *testing.T) {
 		t.Fatalf("create prompt: %v", err)
 	}
 
-	if err := svc.DeletePrompt(ctx, prompt.ID, "tester"); err != nil {
+	if err := svc.DeletePrompt(ctx, prompt.ID, "tester@example.com"); err != nil {
 		t.Fatalf("delete prompt: %v", err)
 	}
 
@@ -298,15 +298,15 @@ func TestDeletePrompt(t *testing.T) {
 	if logs[0].Action != "prompt.deleted" {
 		t.Fatalf("unexpected audit action %s", logs[0].Action)
 	}
-	if logs[0].CreatedBy == nil || *logs[0].CreatedBy != "tester" {
-		t.Fatalf("expected audit actor tester got %v", logs[0].CreatedBy)
+	if logs[0].CreatedBy == nil || *logs[0].CreatedBy != "tester@example.com" {
+		t.Fatalf("expected audit actor tester@example.com got %v", logs[0].CreatedBy)
 	}
 
 	if _, err := svc.GetPrompt(ctx, prompt.ID); err != ErrPromptNotFound {
 		t.Fatalf("expected ErrPromptNotFound got %v", err)
 	}
 
-	if err := svc.DeletePrompt(ctx, prompt.ID, "tester"); err != ErrPromptNotFound {
+	if err := svc.DeletePrompt(ctx, prompt.ID, "tester@example.com"); err != ErrPromptNotFound {
 		t.Fatalf("expected ErrPromptNotFound on second delete got %v", err)
 	}
 }

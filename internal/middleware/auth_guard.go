@@ -12,6 +12,8 @@ import (
 const (
 	// UserContextKey 在上下文中存储用户 ID。
 	UserContextKey = "user_id"
+	// UserEmailContextKey 在上下文中存储用户邮箱。
+	UserEmailContextKey = "user_email"
 	// UserRoleContextKey 在上下文中存储用户角色。
 	UserRoleContextKey = "user_role"
 )
@@ -44,6 +46,7 @@ func AuthGuard(accessSecret string) gin.HandlerFunc {
 		}
 
 		ctx.Set(UserContextKey, claims.UserID)
+		ctx.Set(UserEmailContextKey, claims.Subject)
 		ctx.Set(UserRoleContextKey, claims.Role)
 		ctx.Set("auth_claims", claims)
 		ctx.Next()

@@ -12,6 +12,7 @@ import { RequireAuth } from './require-auth'
 import { LoadingScreen } from '@/components/loading-screen'
 import { LoginPage } from '@/features/auth/pages/login-page'
 import { DashboardPage } from '@/features/dashboard/pages/dashboard-page'
+import { PromptEditorPage } from '@/features/prompts/pages/prompt-editor-page'
 
 const routes: RouteObject[] = [
   {
@@ -29,6 +30,14 @@ const routes: RouteObject[] = [
       {
         path: 'prompts',
         element: <DashboardPage />,
+      },
+      {
+        path: 'prompts/new',
+        element: <PromptEditorPage />,
+      },
+      {
+        path: 'prompts/:promptId/edit',
+        element: <PromptEditorPage />,
       },
     ],
   },
