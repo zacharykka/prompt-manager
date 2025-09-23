@@ -12,6 +12,7 @@ import { usePromptsQuery } from '@/features/prompts/hooks/use-prompts'
 import type { Prompt } from '@/features/prompts/types'
 
 const DEFAULT_LIMIT = 20
+type PromptView = 'active' | 'deleted'
 
 interface PromptListSectionProps {
   onCreatePrompt?: () => void
@@ -20,6 +21,7 @@ interface PromptListSectionProps {
 export function PromptListSection({ onCreatePrompt }: PromptListSectionProps) {
   const [searchInput, setSearchInput] = useState('')
   const [queryState, setQueryState] = useState({ search: '', offset: 0 })
+  const [view, setView] = useState<PromptView>('active')
   const [feedback, setFeedback] = useState<
     | {
         type: 'success' | 'error'
@@ -43,16 +45,27 @@ export function PromptListSection({ onCreatePrompt }: PromptListSectionProps) {
     limit: DEFAULT_LIMIT,
     offset: queryState.offset,
     search: queryState.search,
+    includeDeleted: view === 'deleted',
   })
 
   const isInitialLoading = isLoading && !data
   const items = data?.items ?? []
-  const meta = data?.meta ?? {
-    total: items.length,
-    limit: DEFAULT_LIMIT,
-    offset: queryState.offset,
-    hasMore: false,
-  }
+  const filteredItems = view === 'deleted'
+    ? items.filter((item) => item.status === 'deleted')
+    : items.filter((item) => item.status !== 'deleted')
+  const meta = view === 'deleted'
+    ? {
+        total: filteredItems.length,
+        limit: filteredItems.length,
+        offset: 0,
+        hasMore: false,
+      }
+    : data?.meta ?? {
+        total: items.length,
+        limit: DEFAULT_LIMIT,
+        offset: queryState.offset,
+        hasMore: false,
+      }
 
   const handleSearchSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -85,6 +98,14 @@ export function PromptListSection({ onCreatePrompt }: PromptListSectionProps) {
     totalPages,
     Math.floor((meta.offset ?? 0) / (meta.limit || DEFAULT_LIMIT)) + 1,
   )
+
+  const handleViewChange = (nextView: PromptView) => {
+    if (view === nextView) {
+      return
+    }
+    setView(nextView)
+    setQueryState((prev) => ({ search: prev.search, offset: 0 }))
+  }
 
   const {
     mutateAsync: deletePromptAsync,
@@ -171,43 +192,73 @@ export function PromptListSection({ onCreatePrompt }: PromptListSectionProps) {
         </div>
       </form>
 
+      <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-white p-3">
+        <span className="text-sm font-medium text-slate-600">视图</span>
+        <div className="flex gap-2">
+          <Button
+            type="button"
+            size="sm"
+            variant={view === 'active' ? 'primary' : 'secondary'}
+            onClick={() => handleViewChange('active')}
+            disabled={isFetching && view === 'active'}
+          >
+            全部
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant={view === 'deleted' ? 'primary' : 'secondary'}
+            onClick={() => handleViewChange('deleted')}
+            disabled={isFetching && view === 'deleted'}
+          >
+            回收站
+          </Button>
+        </div>
+      </div>
+
       {isInitialLoading ? (
         <PromptListSkeleton />
       ) : isError ? (
         <PromptListError error={error} onRetry={() => refetch()} isFetching={isFetching} />
-      ) : items.length === 0 ? (
-        <PromptListEmpty onCreatePrompt={onCreatePrompt} onRefresh={() => refetch()} />
+      ) : filteredItems.length === 0 ? (
+        <PromptListEmpty
+          view={view}
+          onCreatePrompt={onCreatePrompt}
+          onRefresh={() => refetch()}
+        />
       ) : (
         <div className="space-y-4">
           <PromptTable
-            prompts={items}
-            onDeletePrompt={handleDeletePrompt}
+            prompts={filteredItems}
+            onDeletePrompt={view === 'deleted' ? undefined : handleDeletePrompt}
             deletingPromptId={isDeleting ? deleteTarget?.id ?? null : null}
-            disableActions={isDeleting}
+            disableActions={isDeleting || view === 'deleted'}
           />
-          <div className="flex flex-col gap-3 border-t border-slate-200 pt-4 md:flex-row md:items-center md:justify-between">
-            <span className="text-sm text-slate-500">
-              第 {currentPage} / {totalPages} 页
-            </span>
-            <div className="flex items-center gap-2">
-              <Button
-                type="button"
-                variant="secondary"
-                onClick={handlePrevPage}
-                disabled={!hasPrev || isFetching}
-              >
-                上一页
-              </Button>
-              <Button
-                type="button"
-                variant="secondary"
-                onClick={handleNextPage}
-                disabled={!hasNext || isFetching}
-              >
-                下一页
-              </Button>
+          {view === 'deleted' ? null : (
+            <div className="flex flex-col gap-3 border-t border-slate-200 pt-4 md:flex-row md:items-center md:justify-between">
+              <span className="text-sm text-slate-500">
+                第 {currentPage} / {totalPages} 页
+              </span>
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={handlePrevPage}
+                  disabled={!hasPrev || isFetching}
+                >
+                  上一页
+                </Button>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={handleNextPage}
+                  disabled={!hasNext || isFetching}
+                >
+                  下一页
+                </Button>
+              </div>
             </div>
-          </div>
+          )}
         </div>
       )}
 
@@ -265,20 +316,25 @@ function parseDeleteError(error: unknown): string {
 }
 
 function PromptListEmpty({
+  view,
   onCreatePrompt,
   onRefresh,
 }: {
+  view: PromptView
   onCreatePrompt?: () => void
   onRefresh: () => void
 }) {
+  const title = view === 'deleted' ? '回收站暂无内容' : '还没有 Prompt'
+  const description =
+    view === 'deleted'
+      ? '已删除的 Prompt 会出现在这里，暂时没有可展示的记录。'
+      : '开始创建第一个 Prompt 模板，便于团队共享与复用。'
   return (
     <div className="flex flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-slate-300 bg-white p-12 text-center">
-      <h2 className="text-lg font-semibold text-slate-800">还没有 Prompt</h2>
-      <p className="text-sm text-slate-500">
-        开始创建第一个 Prompt 模板，便于团队共享与复用。
-      </p>
+      <h2 className="text-lg font-semibold text-slate-800">{title}</h2>
+      <p className="text-sm text-slate-500">{description}</p>
       <div className="flex gap-2">
-        {onCreatePrompt ? (
+        {view === 'deleted' ? null : onCreatePrompt ? (
           <Button type="button" onClick={onCreatePrompt}>
             新建 Prompt
           </Button>

@@ -62,7 +62,7 @@ export function DeletePromptDialog({
             onClick={onConfirm}
             disabled={isProcessing}
           >
-            {isProcessing ? '删除中…' : '确认删除'}
+            {isProcessing ? '删除中...' : '确认删除'}
           </Button>
         </footer>
       </div>

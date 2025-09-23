@@ -89,7 +89,7 @@ export function PromptTable({
                     onClick={() => onDeletePrompt(prompt)}
                     disabled={disableActions || deletingPromptId === prompt.id}
                   >
-                    {deletingPromptId === prompt.id ? '删除中…' : '删除'}
+                    {deletingPromptId === prompt.id ? '删除中...' : '删除'}
                   </Button>
                 </td>
               ) : null}
