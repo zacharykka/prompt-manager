@@ -150,8 +150,12 @@
 
 ## 审计与软删除
 - **软删除语义**：`prompts` 表新增 `status`（默认 `active`）与 `deleted_at` 字段，通过更新状态实现软删除，后续可按需恢复或定期物理清理。
-- **审计日志**：`prompt_audit_logs` 表记录关键动作（当前实现覆盖删除），字段包含操作者、动作类型与可选上下文 `payload`，便于合规追踪。
-- **Service 行为**：后端删除逻辑会同时写入审计日志，若未来扩展更多操作，可沿用相同仓储接口快速落地。
+- **恢复能力**：
+  - `POST /prompts/{id}/restore` 可将软删除的 Prompt 重新激活，同时清空 `deleted_at` 并回写最新 `updated_at`。
+  - `GET /prompts?includeDeleted=true` 可列出处于 `deleted` 状态的记录，便于回收站场景；未显式传参时默认仅返回 `active` 数据。
+  - 非删除状态调用恢复接口会返回 `400 PROMPT_NOT_DELETED`，已恢复或不存在的记录则返回 `404 PROMPT_NOT_FOUND`。
+- **审计日志**：`prompt_audit_logs` 表记录关键动作（当前实现覆盖删除与恢复），字段包含操作者、动作类型与可选上下文 `payload`，便于合规追踪。
+- **Service 行为**：后端删除与恢复逻辑均会写入审计日志，若未来扩展更多操作，可沿用相同仓储接口快速落地。
 
 ## 配置与环境
 - `config/default.yaml`：基础配置（端口、日志级别、JWT secret 占位）。

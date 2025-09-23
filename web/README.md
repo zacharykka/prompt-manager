@@ -7,7 +7,7 @@
 
 ## 业务范围概述
 - **身份认证**：登录、令牌刷新、角色识别（Admin/Editor/Viewer）。
-- **Prompt 列表**：支持名称搜索、分页、标签展示、当前正文概览，并提供快速进入编辑或创建流程。
+- **Prompt 列表**：支持名称搜索、分页、标签展示、当前正文概览，并提供快速进入编辑或创建流程；回收站视图可查看软删除记录并执行一键恢复。
 - **Prompt 详情**：基础元信息、当前激活版本、关联统计与审计日志。
 - **版本管理**：版本历史浏览、Diff 对比、激活/回滚、版本备注。
 - **编辑流程**：创建/编辑 Prompt，支持草稿、字段校验、变量说明。
@@ -74,7 +74,7 @@ web/
 3. **认证模块**：完成登录页面、Token 存储与自动刷新逻辑，保护受限路由。
 4. **Prompt 列表迭代**：实现列表视图、搜索过滤、分页、空态/加载态、正文预览。
 5. **详情 + 版本管理**：完成详情页面、版本 Tab、Diff、激活/回滚交互。
-6. **增删改流程**：构建 PromptEditor，落地创建、编辑、删除的 Mutation 流程；处理乐观更新与表单校验。
+6. **增删改流程**：构建 PromptEditor，落地创建、编辑、删除的 Mutation 流程；处理乐观更新与表单校验；回收站页支持软删除恢复与提示反馈。
 7. **增强体验**：加入权限提示、字段帮助信息、批量操作、统计面板等增量功能。
 8. **质量保障**：补齐关键交互单元测试、集成测试，配置 CI，接入 Bundle Analyzer 做性能体检。
 9. **部署策略**：输出构建产物，通过 Vercel/Netlify/S3+CloudFront 等方案上线；结合后端环境变量配置跨域与鉴权。
@@ -92,17 +92,17 @@ web/
 ## 快速开始
 
 ```bash
-# 安装依赖
-town npm install
+# 安装依赖（推荐 pnpm，也可改用 npm install）
+pnpm install
 
 # 本地开发
-npm run dev
+pnpm run dev
 
 # 构建产物
-npm run build
+pnpm run build
 
 # 预览构建
-town npm run preview
+pnpm run preview
 ```
 
 默认使用 Vite 提供的 React + TypeScript 模板，后续可根据规划引入 Tailwind CSS、TanStack Query 等依赖。
