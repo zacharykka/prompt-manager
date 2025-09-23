@@ -6,6 +6,7 @@ interface CreatePromptPayload {
   name: string
   description?: string
   tags?: string[]
+  body?: string
 }
 
 interface RawPromptResponse {

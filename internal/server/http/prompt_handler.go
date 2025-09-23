@@ -38,6 +38,7 @@ type createPromptRequest struct {
 	Name        string   `json:"name" binding:"required,min=1,max=128"`
 	Description *string  `json:"description"`
 	Tags        []string `json:"tags" binding:"max=10"`
+	Body        string   `json:"body" binding:"omitempty,min=1"`
 }
 
 type createPromptVersionRequest struct {
@@ -67,6 +68,25 @@ func (h *PromptHandler) CreatePrompt(ctx *gin.Context) {
 	if err != nil {
 		h.handleError(ctx, err)
 		return
+	}
+
+	body := strings.TrimSpace(req.Body)
+	if body != "" {
+		if _, err := h.service.CreatePromptVersion(ctx, promptsvc.CreatePromptVersionInput{
+			PromptID:  prompt.ID,
+			Body:      body,
+			Status:    "published",
+			CreatedBy: createdBy,
+			Activate:  true,
+		}); err != nil {
+			httpx.RespondError(ctx, http.StatusInternalServerError, "CREATE_VERSION_FAILED", err.Error(), nil)
+			return
+		}
+		// 重新加载 Prompt 以便带上最新的激活版本信息
+		updatedPrompt, err := h.service.GetPrompt(ctx, prompt.ID)
+		if err == nil {
+			prompt = updatedPrompt
+		}
 	}
 
 	httpx.RespondOK(ctx, gin.H{"prompt": prompt})

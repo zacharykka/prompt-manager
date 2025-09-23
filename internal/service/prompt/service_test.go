@@ -75,6 +75,9 @@ func TestCreatePromptAndVersion(t *testing.T) {
 	if updated.ActiveVersionID == nil || *updated.ActiveVersionID != version.ID {
 		t.Fatalf("expected active version to be %s", version.ID)
 	}
+	if updated.ActiveVersionBody == nil || *updated.ActiveVersionBody != "Hello, {{.name}}!" {
+		t.Fatalf("unexpected active version body: %v", updated.ActiveVersionBody)
+	}
 
 	versions, err := svc.ListPromptVersions(context.Background(), prompt.ID, 10, 0)
 	if err != nil {

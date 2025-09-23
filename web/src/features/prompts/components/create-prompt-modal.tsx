@@ -25,6 +25,10 @@ const createPromptSchema = z.object({
     .string()
     .optional()
     .or(z.literal('')),
+  body: z
+    .string()
+    .min(1, '内容不能为空')
+    .max(2000, '内容长度最大 2000 字符'),
 })
 
 type CreatePromptValues = z.infer<typeof createPromptSchema>
@@ -47,6 +51,7 @@ export function CreatePromptModal({ open, onClose }: CreatePromptModalProps) {
       name: '',
       description: '',
       tags: '',
+      body: '',
     },
   })
 
@@ -61,19 +66,20 @@ export function CreatePromptModal({ open, onClose }: CreatePromptModalProps) {
         name: values.name.trim(),
         description: values.description?.trim() || undefined,
         tags: normalizeTags(values.tags),
+        body: values.body.trim(),
       }
       return createPrompt(payload)
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['prompts'] })
       onClose()
-      reset({ name: '', description: '', tags: '' })
+      reset({ name: '', description: '', tags: '', body: '' })
     },
   })
 
   useEffect(() => {
     if (!open) {
-      reset({ name: '', description: '', tags: '' })
+      reset({ name: '', description: '', tags: '', body: '' })
     }
   }, [open, reset])
 
@@ -144,6 +150,21 @@ export function CreatePromptModal({ open, onClose }: CreatePromptModalProps) {
             />
             {errors.tags ? (
               <p className="text-xs text-red-600">{errors.tags.message}</p>
+            ) : null}
+          </div>
+
+          <div className="space-y-2">
+            <label className="block text-sm font-medium text-slate-700" htmlFor="prompt-body">
+              内容
+            </label>
+            <Textarea
+              id="prompt-body"
+              placeholder="编写 Prompt 正文，支持模板变量"
+              rows={6}
+              {...register('body')}
+            />
+            {errors.body ? (
+              <p className="text-xs text-red-600">{errors.body.message}</p>
             ) : null}
           </div>
 

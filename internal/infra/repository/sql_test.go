@@ -141,6 +141,9 @@ func TestPromptRepositories_Workflow(t *testing.T) {
 	if updatedPrompt.ActiveVersionID == nil || *updatedPrompt.ActiveVersionID != versionID {
 		t.Fatalf("expected active version %s got %v", versionID, updatedPrompt.ActiveVersionID)
 	}
+	if updatedPrompt.ActiveVersionBody == nil || *updatedPrompt.ActiveVersionBody != "Hello {{.city}}" {
+		t.Fatalf("expected active version body, got %v", updatedPrompt.ActiveVersionBody)
+	}
 
 	execLog := &domain.PromptExecutionLog{
 		ID:               uuid.NewString(),

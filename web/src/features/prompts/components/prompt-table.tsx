@@ -14,6 +14,7 @@ export function PromptTable({ prompts }: PromptTableProps) {
         <thead className="bg-slate-50">
           <tr className="text-left text-sm font-semibold text-slate-600">
             <th scope="col" className="px-4 py-3">名称</th>
+            <th scope="col" className="px-4 py-3">内容</th>
             <th scope="col" className="px-4 py-3">标签</th>
             <th scope="col" className="px-4 py-3">状态</th>
             <th scope="col" className="px-4 py-3">更新人</th>
@@ -32,6 +33,15 @@ export function PromptTable({ prompts }: PromptTableProps) {
                     </span>
                   ) : null}
                 </div>
+              </td>
+              <td className="max-w-md px-4 py-3">
+                {prompt.activeVersionBody ? (
+                  <p className="line-clamp-2 text-xs text-slate-600">
+                    {prompt.activeVersionBody}
+                  </p>
+                ) : (
+                  <span className="text-xs text-slate-400">暂无内容</span>
+                )}
               </td>
               <td className="px-4 py-3">
                 <div className="flex flex-wrap gap-2">

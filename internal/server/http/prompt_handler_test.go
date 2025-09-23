@@ -58,6 +58,7 @@ func TestPromptHandler_CreateAndList(t *testing.T) {
 	payload := map[string]interface{}{
 		"name": "Greeting",
 		"tags": []string{"demo"},
+		"body": "Hello there",
 	}
 	body, _ := json.Marshal(payload)
 
@@ -84,7 +85,8 @@ func TestPromptHandler_CreateAndList(t *testing.T) {
 	var listResp struct {
 		Data struct {
 			Items []struct {
-				Name string `json:"name"`
+				Name string  `json:"name"`
+				Body *string `json:"active_version_body"`
 			} `json:"items"`
 			Meta struct {
 				Total   int  `json:"total"`
@@ -102,6 +104,9 @@ func TestPromptHandler_CreateAndList(t *testing.T) {
 	}
 	if len(listResp.Data.Items) != 1 || listResp.Data.Items[0].Name != "Greeting" {
 		t.Fatalf("unexpected list response: %s", listRec.Body.String())
+	}
+	if listResp.Data.Items[0].Body == nil || *listResp.Data.Items[0].Body != "Hello there" {
+		t.Fatalf("expected active version body, got %s", listRec.Body.String())
 	}
 }
 

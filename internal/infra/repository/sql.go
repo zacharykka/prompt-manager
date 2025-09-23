@@ -123,6 +123,7 @@ type promptRow struct {
 	description     sql.NullString
 	tags            sql.NullString
 	activeVersionID sql.NullString
+	activeBody      sql.NullString
 	createdBy       sql.NullString
 	createdAt       time.Time
 	updatedAt       time.Time
@@ -156,11 +157,13 @@ VALUES (%s, %s, %s, %s, %s, %s)`, ph.Next(), ph.Next(), ph.Next(), ph.Next(), ph
 
 func (r *promptRepository) GetByID(ctx context.Context, promptID string) (*domain.Prompt, error) {
 	ph := database.NewPlaceholderBuilder(r.dialect)
-	query := fmt.Sprintf(`SELECT id, name, description, tags, active_version_id, created_by, created_at, updated_at
-FROM prompts WHERE id = %s`, ph.Next())
+	query := fmt.Sprintf(`SELECT p.id, p.name, p.description, p.tags, p.active_version_id, pv.body, p.created_by, p.created_at, p.updated_at
+FROM prompts p
+LEFT JOIN prompt_versions pv ON pv.id = p.active_version_id
+WHERE p.id = %s`, ph.Next())
 
 	var row promptRow
-	err := r.db.QueryRowContext(ctx, query, promptID).Scan(&row.id, &row.name, &row.description, &row.tags, &row.activeVersionID, &row.createdBy, &row.createdAt, &row.updatedAt)
+	err := r.db.QueryRowContext(ctx, query, promptID).Scan(&row.id, &row.name, &row.description, &row.tags, &row.activeVersionID, &row.activeBody, &row.createdBy, &row.createdAt, &row.updatedAt)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, domain.ErrNotFound
@@ -183,6 +186,9 @@ FROM prompts WHERE id = %s`, ph.Next())
 	if row.activeVersionID.Valid {
 		prompt.ActiveVersionID = &row.activeVersionID.String
 	}
+	if row.activeBody.Valid {
+		prompt.ActiveVersionBody = &row.activeBody.String
+	}
 	if row.createdBy.Valid {
 		prompt.CreatedBy = &row.createdBy.String
 	}
@@ -204,7 +210,8 @@ func (r *promptRepository) List(ctx context.Context, opts domain.PromptListOptio
 	var builder strings.Builder
 	var args []interface{}
 
-	builder.WriteString(`SELECT id, name, description, tags, active_version_id, created_by, created_at, updated_at FROM prompts`)
+	builder.WriteString(`SELECT p.id, p.name, p.description, p.tags, p.active_version_id, pv.body, p.created_by, p.created_at, p.updated_at FROM prompts p`)
+	builder.WriteString(` LEFT JOIN prompt_versions pv ON pv.id = p.active_version_id`)
 
 	if search != "" {
 		builder.WriteString(" WHERE LOWER(name) LIKE ")
@@ -228,7 +235,7 @@ func (r *promptRepository) List(ctx context.Context, opts domain.PromptListOptio
 	var prompts []*domain.Prompt
 	for rows.Next() {
 		var row promptRow
-		if err := rows.Scan(&row.id, &row.name, &row.description, &row.tags, &row.activeVersionID, &row.createdBy, &row.createdAt, &row.updatedAt); err != nil {
+		if err := rows.Scan(&row.id, &row.name, &row.description, &row.tags, &row.activeVersionID, &row.activeBody, &row.createdBy, &row.createdAt, &row.updatedAt); err != nil {
 			return nil, err
 		}
 		prompt := &domain.Prompt{
@@ -245,6 +252,9 @@ func (r *promptRepository) List(ctx context.Context, opts domain.PromptListOptio
 		}
 		if row.activeVersionID.Valid {
 			prompt.ActiveVersionID = &row.activeVersionID.String
+		}
+		if row.activeBody.Valid {
+			prompt.ActiveVersionBody = &row.activeBody.String
 		}
 		if row.createdBy.Valid {
 			prompt.CreatedBy = &row.createdBy.String
