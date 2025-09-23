@@ -71,12 +71,32 @@ func (s *Service) CreatePrompt(ctx context.Context, input CreatePromptInput) (*d
 }
 
 // ListPrompts 返回 Prompt 列表。
-func (s *Service) ListPrompts(ctx context.Context, limit, offset int) ([]*domain.Prompt, error) {
-	prompts, err := s.repos.Prompts.List(ctx, limit, offset)
-	if err != nil {
-		return nil, err
+// ListPromptsOptions 控制 Prompt 列表查询行为。
+type ListPromptsOptions struct {
+	Limit  int
+	Offset int
+	Search string
+}
+
+// ListPrompts 返回 Prompt 列表及总数。
+func (s *Service) ListPrompts(ctx context.Context, opts ListPromptsOptions) ([]*domain.Prompt, int64, error) {
+	repoOpts := domain.PromptListOptions{
+		Limit:  opts.Limit,
+		Offset: opts.Offset,
+		Search: strings.TrimSpace(opts.Search),
 	}
-	return prompts, nil
+
+	prompts, err := s.repos.Prompts.List(ctx, repoOpts)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	total, err := s.repos.Prompts.Count(ctx, repoOpts)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	return prompts, total, nil
 }
 
 // GetPrompt 根据 ID 获取 Prompt。

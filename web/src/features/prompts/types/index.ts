@@ -12,4 +12,17 @@ export interface Prompt {
 export interface PromptListParams {
   limit?: number
   offset?: number
+  search?: string
+}
+
+export interface PromptListMeta {
+  total: number
+  limit: number
+  offset: number
+  hasMore: boolean
+}
+
+export interface PromptListResult {
+  items: Prompt[]
+  meta: PromptListMeta
 }

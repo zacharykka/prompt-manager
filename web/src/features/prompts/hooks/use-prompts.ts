@@ -8,5 +8,6 @@ export function usePromptsQuery(params: PromptListParams = {}) {
     queryKey: ['prompts', params],
     queryFn: () => listPrompts(params),
     staleTime: 60_000,
+    placeholderData: (previousData) => previousData,
   })
 }

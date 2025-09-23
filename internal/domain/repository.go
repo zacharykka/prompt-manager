@@ -16,7 +16,8 @@ type UserRepository interface {
 type PromptRepository interface {
 	Create(ctx context.Context, prompt *Prompt) error
 	GetByID(ctx context.Context, promptID string) (*Prompt, error)
-	List(ctx context.Context, limit, offset int) ([]*Prompt, error)
+	List(ctx context.Context, opts PromptListOptions) ([]*Prompt, error)
+	Count(ctx context.Context, opts PromptListOptions) (int64, error)
 	UpdateActiveVersion(ctx context.Context, promptID string, versionID *string) error
 }
 
@@ -41,4 +42,11 @@ type Repositories struct {
 	Prompts            PromptRepository
 	PromptVersions     PromptVersionRepository
 	PromptExecutionLog PromptExecutionLogRepository
+}
+
+// PromptListOptions 定义 Prompt 列表过滤与分页参数。
+type PromptListOptions struct {
+	Limit  int
+	Offset int
+	Search string
 }

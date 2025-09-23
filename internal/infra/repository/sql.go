@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/zacharykka/prompt-manager/internal/domain"
@@ -188,18 +189,37 @@ FROM prompts WHERE id = %s`, ph.Next())
 	return prompt, nil
 }
 
-func (r *promptRepository) List(ctx context.Context, limit, offset int) ([]*domain.Prompt, error) {
+func (r *promptRepository) List(ctx context.Context, opts domain.PromptListOptions) ([]*domain.Prompt, error) {
+	limit := opts.Limit
 	if limit <= 0 {
 		limit = 50
 	}
+	offset := opts.Offset
 	if offset < 0 {
 		offset = 0
 	}
-	ph := database.NewPlaceholderBuilder(r.dialect)
-	query := fmt.Sprintf(`SELECT id, name, description, tags, active_version_id, created_by, created_at, updated_at
-FROM prompts ORDER BY updated_at DESC LIMIT %s OFFSET %s`, ph.Next(), ph.Next())
+	search := strings.TrimSpace(strings.ToLower(opts.Search))
 
-	rows, err := r.db.QueryContext(ctx, query, limit, offset)
+	ph := database.NewPlaceholderBuilder(r.dialect)
+	var builder strings.Builder
+	var args []interface{}
+
+	builder.WriteString(`SELECT id, name, description, tags, active_version_id, created_by, created_at, updated_at FROM prompts`)
+
+	if search != "" {
+		builder.WriteString(" WHERE LOWER(name) LIKE ")
+		builder.WriteString(ph.Next())
+		args = append(args, fmt.Sprintf("%%%s%%", search))
+	}
+
+	builder.WriteString(" ORDER BY updated_at DESC LIMIT ")
+	builder.WriteString(ph.Next())
+	builder.WriteString(" OFFSET ")
+	builder.WriteString(ph.Next())
+
+	args = append(args, limit, offset)
+
+	rows, err := r.db.QueryContext(ctx, builder.String(), args...)
 	if err != nil {
 		return nil, err
 	}
@@ -258,6 +278,26 @@ func (r *promptRepository) UpdateActiveVersion(ctx context.Context, promptID str
 		return domain.ErrNotFound
 	}
 	return nil
+}
+
+func (r *promptRepository) Count(ctx context.Context, opts domain.PromptListOptions) (int64, error) {
+	search := strings.TrimSpace(strings.ToLower(opts.Search))
+	ph := database.NewPlaceholderBuilder(r.dialect)
+	var builder strings.Builder
+	var args []interface{}
+
+	builder.WriteString("SELECT COUNT(1) FROM prompts")
+	if search != "" {
+		builder.WriteString(" WHERE LOWER(name) LIKE ")
+		builder.WriteString(ph.Next())
+		args = append(args, fmt.Sprintf("%%%s%%", search))
+	}
+
+	var total int64
+	if err := r.db.QueryRowContext(ctx, builder.String(), args...).Scan(&total); err != nil {
+		return 0, err
+	}
+	return total, nil
 }
 
 // ---- Prompt Version 仓储 ----

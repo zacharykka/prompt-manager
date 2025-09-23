@@ -61,7 +61,7 @@ func TestPromptHandler_CreateAndList(t *testing.T) {
 	}
 	body, _ := json.Marshal(payload)
 
-	req := httptest.NewRequest(http.MethodPost, "/prompts/", bytes.NewReader(body))
+	req := httptest.NewRequest(http.MethodPost, "/prompts", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 
@@ -72,13 +72,36 @@ func TestPromptHandler_CreateAndList(t *testing.T) {
 	}
 
 	// list prompts
-	listReq := httptest.NewRequest(http.MethodGet, "/prompts/", nil)
+	listReq := httptest.NewRequest(http.MethodGet, "/prompts?search=Gree", nil)
 	listRec := httptest.NewRecorder()
 
 	router.ServeHTTP(listRec, listReq)
 
 	if listRec.Code != http.StatusOK {
 		t.Fatalf("expected 200 got %d", listRec.Code)
+	}
+
+	var listResp struct {
+		Data struct {
+			Items []struct {
+				Name string `json:"name"`
+			} `json:"items"`
+			Meta struct {
+				Total   int  `json:"total"`
+				Limit   int  `json:"limit"`
+				Offset  int  `json:"offset"`
+				HasMore bool `json:"hasMore"`
+			} `json:"meta"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(listRec.Body.Bytes(), &listResp); err != nil {
+		t.Fatalf("unmarshal list response: %v", err)
+	}
+	if listResp.Data.Meta.Total != 1 {
+		t.Fatalf("expected total 1 got %d", listResp.Data.Meta.Total)
+	}
+	if len(listResp.Data.Items) != 1 || listResp.Data.Items[0].Name != "Greeting" {
+		t.Fatalf("unexpected list response: %s", listRec.Body.String())
 	}
 }
 
@@ -98,7 +121,7 @@ func TestPromptHandler_CreateVersion(t *testing.T) {
 	// create prompt first
 	createPayload := map[string]interface{}{"name": "Welcome"}
 	createBody, _ := json.Marshal(createPayload)
-	req := httptest.NewRequest(http.MethodPost, "/prompts/", bytes.NewReader(createBody))
+	req := httptest.NewRequest(http.MethodPost, "/prompts", bytes.NewReader(createBody))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
@@ -152,7 +175,7 @@ func TestPromptHandler_GetStats(t *testing.T) {
 	// create prompt
 	createPayload := map[string]interface{}{"name": "Stats"}
 	createBody, _ := json.Marshal(createPayload)
-	req := httptest.NewRequest(http.MethodPost, "/prompts/", bytes.NewReader(createBody))
+	req := httptest.NewRequest(http.MethodPost, "/prompts", bytes.NewReader(createBody))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	router.ServeHTTP(rec, req)

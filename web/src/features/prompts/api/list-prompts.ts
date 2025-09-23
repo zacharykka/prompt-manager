@@ -1,5 +1,10 @@
 import { apiClient } from '@/libs/http/client'
-import type { Prompt, PromptListParams } from '@/features/prompts/types'
+import type {
+  Prompt,
+  PromptListMeta,
+  PromptListParams,
+  PromptListResult,
+} from '@/features/prompts/types'
 
 type RawPrompt = {
   id: string
@@ -12,8 +17,16 @@ type RawPrompt = {
   updated_at: string
 }
 
+interface RawListMeta {
+  total?: number
+  limit?: number
+  offset?: number
+  hasMore?: boolean
+}
+
 interface RawListResponse {
   items: RawPrompt[]
+  meta?: RawListMeta
 }
 
 interface SuccessResponse<T> {
@@ -22,7 +35,7 @@ interface SuccessResponse<T> {
 
 export async function listPrompts(
   params: PromptListParams = {},
-): Promise<Prompt[]> {
+): Promise<PromptListResult> {
   const response = await apiClient.get<SuccessResponse<RawListResponse>>(
     '/prompts',
     {
@@ -31,10 +44,13 @@ export async function listPrompts(
   )
 
   const body = response.data.data
-  return (body.items ?? []).map(mapPrompt)
+  const items = (body.items ?? []).map(mapPrompt)
+  const meta = mapMeta(body.meta, params, items.length)
+
+  return { items, meta }
 }
 
-function mapPrompt(raw: RawPrompt): Prompt {
+export function mapPrompt(raw: RawPrompt): Prompt {
   return {
     id: raw.id,
     name: raw.name,
@@ -65,4 +81,22 @@ function parseTags(value: unknown): string[] {
     }
   }
   return []
+}
+
+function mapMeta(
+  raw: RawListMeta | undefined,
+  params: PromptListParams,
+  itemCount: number,
+): PromptListMeta {
+  const limit = raw?.limit ?? params.limit ?? 50
+  const offset = raw?.offset ?? params.offset ?? 0
+  const total = raw?.total ?? itemCount
+  const hasMore = raw?.hasMore ?? offset+itemCount < total
+
+  return {
+    total,
+    limit,
+    offset,
+    hasMore,
+  }
 }

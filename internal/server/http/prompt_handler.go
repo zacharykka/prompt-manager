@@ -3,6 +3,7 @@ package http
 import (
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/zacharykka/prompt-manager/internal/middleware"
@@ -22,7 +23,9 @@ func NewPromptHandler(service *promptsvc.Service) *PromptHandler {
 
 // RegisterRoutes 注册 Prompt 相关路由。
 func (h *PromptHandler) RegisterRoutes(rg *gin.RouterGroup) {
+	rg.POST("", h.CreatePrompt)
 	rg.POST("/", h.CreatePrompt)
+	rg.GET("", h.ListPrompts)
 	rg.GET("/", h.ListPrompts)
 	rg.GET("/:id", h.GetPrompt)
 	rg.POST("/:id/versions", h.CreatePromptVersion)
@@ -32,17 +35,17 @@ func (h *PromptHandler) RegisterRoutes(rg *gin.RouterGroup) {
 }
 
 type createPromptRequest struct {
-    Name        string   `json:"name" binding:"required,min=1,max=128"`
-    Description *string  `json:"description"`
-    Tags        []string `json:"tags" binding:"max=10"`
+	Name        string   `json:"name" binding:"required,min=1,max=128"`
+	Description *string  `json:"description"`
+	Tags        []string `json:"tags" binding:"max=10"`
 }
 
 type createPromptVersionRequest struct {
-    Body            string      `json:"body" binding:"required,min=1"`
-    VariablesSchema interface{} `json:"variables_schema"`
-    Metadata        interface{} `json:"metadata"`
-    Status          string      `json:"status" binding:"omitempty,oneof=draft published archived"`
-    Activate        bool        `json:"activate"`
+	Body            string      `json:"body" binding:"required,min=1"`
+	VariablesSchema interface{} `json:"variables_schema"`
+	Metadata        interface{} `json:"metadata"`
+	Status          string      `json:"status" binding:"omitempty,oneof=draft published archived"`
+	Activate        bool        `json:"activate"`
 }
 
 // CreatePrompt 处理创建 Prompt 请求。
@@ -72,14 +75,27 @@ func (h *PromptHandler) CreatePrompt(ctx *gin.Context) {
 // ListPrompts 列出 Prompt。
 func (h *PromptHandler) ListPrompts(ctx *gin.Context) {
 	limit, offset := parsePagination(ctx.Query("limit"), ctx.Query("offset"))
+	search := strings.TrimSpace(ctx.Query("search"))
 
-	prompts, err := h.service.ListPrompts(ctx, limit, offset)
+	prompts, total, err := h.service.ListPrompts(ctx, promptsvc.ListPromptsOptions{
+		Limit:  limit,
+		Offset: offset,
+		Search: search,
+	})
 	if err != nil {
 		httpx.RespondError(ctx, http.StatusInternalServerError, "LIST_FAILED", err.Error(), nil)
 		return
 	}
 
-	httpx.RespondOK(ctx, gin.H{"items": prompts})
+	httpx.RespondOK(ctx, gin.H{
+		"items": prompts,
+		"meta": gin.H{
+			"total":   total,
+			"limit":   limit,
+			"offset":  offset,
+			"hasMore": int64(offset)+int64(len(prompts)) < total,
+		},
+	})
 }
 
 // GetPrompt 获取指定 Prompt。

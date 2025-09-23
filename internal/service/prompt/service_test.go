@@ -145,3 +145,41 @@ func TestGetExecutionStats(t *testing.T) {
 		t.Fatalf("unexpected total calls: %d", stats[0].TotalCalls)
 	}
 }
+
+func TestListPromptsWithSearch(t *testing.T) {
+	svc, cleanup := setupPromptService(t)
+	defer cleanup()
+
+	if _, err := svc.CreatePrompt(context.Background(), CreatePromptInput{Name: "Alpha greeting"}); err != nil {
+		t.Fatalf("create alpha: %v", err)
+	}
+	if _, err := svc.CreatePrompt(context.Background(), CreatePromptInput{Name: "Beta message"}); err != nil {
+		t.Fatalf("create beta: %v", err)
+	}
+
+	prompts, total, err := svc.ListPrompts(context.Background(), ListPromptsOptions{
+		Limit:  1,
+		Search: "a",
+	})
+	if err != nil {
+		t.Fatalf("list prompts: %v", err)
+	}
+	if total != 2 {
+		t.Fatalf("expected total 2 got %d", total)
+	}
+	if len(prompts) != 1 {
+		t.Fatalf("expected page size 1 got %d", len(prompts))
+	}
+
+	secondPage, _, err := svc.ListPrompts(context.Background(), ListPromptsOptions{
+		Limit:  1,
+		Offset: 1,
+		Search: "a",
+	})
+	if err != nil {
+		t.Fatalf("list second page: %v", err)
+	}
+	if len(secondPage) != 1 {
+		t.Fatalf("expected second page 1 item got %d", len(secondPage))
+	}
+}
