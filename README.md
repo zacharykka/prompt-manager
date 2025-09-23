@@ -105,8 +105,8 @@
 - `POST /api/v1/auth/register`：注册用户，字段 `email`、`password`、`role`（可选）。
 - `POST /api/v1/auth/login`：使用 `email + password` 登录，返回访问令牌与刷新令牌。
 - `POST /api/v1/auth/refresh`：提供刷新令牌换取新的访问/刷新令牌。
-- `POST /api/v1/prompts`：创建 Prompt，可同时提交 `name`、`description`、`tags` 与初始 `body`，若提供正文会自动生成首个版本并设为已发布且写入响应。
-- `GET /api/v1/prompts`：分页查询 Prompt 列表，支持 `limit`、`offset`、`search`（按名称模糊匹配），返回 `items` 与 `meta.total/limit/offset/hasMore`，同时包含激活版本正文摘要 `active_version_body` 便于前端展示。
+- `POST /api/v1/prompts`：创建 Prompt，可同时提交 `name`、`description`、`tags` 与初始 `body`，若提供正文会自动生成首个版本并设为已发布，同时将内容落入 `prompts.body` 字段。
+- `GET /api/v1/prompts`：分页查询 Prompt 列表，支持 `limit`、`offset`、`search`（按名称模糊匹配），返回 `items` 与 `meta.total/limit/offset/hasMore`，并包含当前激活版本正文 `body` 便于前端展示概要。
 - `GET /api/v1/prompts/{id}`：获取指定 Prompt 详情。
 - `POST /api/v1/prompts/{id}/versions`：新增 Prompt 版本并可选设为激活。
 - `GET /api/v1/prompts/{id}/versions`：查看 Prompt 版本列表。
