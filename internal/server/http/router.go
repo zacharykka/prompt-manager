@@ -44,6 +44,7 @@ func NewEngine(cfg *config.Config, logger *zap.Logger, opts RouterOptions) *gin.
 	gin.SetMode(ginMode)
 
 	engine := gin.New()
+	engine.RedirectTrailingSlash = false
 
 	engine.Use(gin.Recovery())
 	engine.Use(middleware.SecurityHeaders(cfg.Server.SecurityHeaders))
@@ -86,6 +87,7 @@ func NewEngine(cfg *config.Config, logger *zap.Logger, opts RouterOptions) *gin.
 	if opts.PromptHandler != nil {
 		promptGroup := api.Group("/prompts")
 		promptGroup.Use(middleware.AuthGuard(cfg.Auth.AccessTokenSecret))
+		promptGroup.GET("", opts.PromptHandler.ListPrompts)
 		promptGroup.GET("/", opts.PromptHandler.ListPrompts)
 		promptGroup.GET("/:id", opts.PromptHandler.GetPrompt)
 		promptGroup.GET("/:id/versions", opts.PromptHandler.ListPromptVersions)
@@ -93,6 +95,7 @@ func NewEngine(cfg *config.Config, logger *zap.Logger, opts RouterOptions) *gin.
 
 		writeGroup := promptGroup.Group("")
 		writeGroup.Use(middleware.RequireRoles(middleware.RoleAdmin, middleware.RoleEditor))
+		writeGroup.POST("", opts.PromptHandler.CreatePrompt)
 		writeGroup.POST("/", opts.PromptHandler.CreatePrompt)
 		writeGroup.POST("/:id/versions", opts.PromptHandler.CreatePromptVersion)
 		writeGroup.POST("/:id/versions/:versionId/activate", opts.PromptHandler.SetActiveVersion)
