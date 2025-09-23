@@ -31,8 +31,7 @@ const promptEditorSchema = z.object({
     .or(z.literal('')),
   body: z
     .string()
-    .min(1, '内容不能为空')
-    .max(20000, '内容长度最大 20000 字符'),
+    .min(1, '内容不能为空'),
 })
 
 type PromptEditorValues = z.infer<typeof promptEditorSchema>
