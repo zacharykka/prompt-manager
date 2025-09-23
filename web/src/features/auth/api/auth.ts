@@ -1,5 +1,7 @@
-import { apiClient } from '@/libs/http/client'
+import axios from 'axios'
+
 import type { LoginResponse, Tokens, User } from '@/features/auth/types'
+import { env } from '@/libs/config/env'
 
 interface RawTokens {
   access_token: string
@@ -32,16 +34,28 @@ interface SuccessResponse<T> {
   data: T
 }
 
+const authClient = axios.create({
+  baseURL: env.apiBaseUrl,
+  timeout: 15000,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+})
+
 export async function login(payload: LoginPayload): Promise<LoginResponse> {
-  const response = await apiClient.post<SuccessResponse<RawLoginResponse>>(
+  const response = await authClient.post<SuccessResponse<RawLoginResponse>>(
     '/auth/login',
     payload,
   )
-  const body = response.data.data
-  return {
-    tokens: mapTokens(body.tokens),
-    user: mapUser(body.user),
-  }
+  return mapLoginResponse(response.data.data)
+}
+
+export async function refreshTokens(refreshToken: string): Promise<LoginResponse> {
+  const response = await authClient.post<SuccessResponse<RawLoginResponse>>(
+    '/auth/refresh',
+    { refresh_token: refreshToken },
+  )
+  return mapLoginResponse(response.data.data)
 }
 
 function mapTokens(raw: RawTokens): Tokens {
@@ -62,5 +76,12 @@ function mapUser(raw: RawUser): User {
     lastLoginAt: raw.last_login_at ?? null,
     createdAt: raw.created_at,
     updatedAt: raw.updated_at,
+  }
+}
+
+function mapLoginResponse(raw: RawLoginResponse): LoginResponse {
+  return {
+    tokens: mapTokens(raw.tokens),
+    user: mapUser(raw.user),
   }
 }
