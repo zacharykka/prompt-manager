@@ -17,3 +17,7 @@ bin/
 
 # Go modules
 vendor/
+
+# Node.js
+node_modules/
+*.log
