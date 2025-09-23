@@ -38,5 +38,10 @@ auth: # 认证与授权相关密钥
   accessTokenTTL: 15m # Access Token 有效期
   refreshTokenTTL: 720h # Refresh Token 有效期
   apiKeyHashSecret: "" # API Key 哈希盐值
+seed: # 启动时的种子数据配置
+  admin: # 初始管理员账号配置
+    email: "" # 管理员邮箱（为空表示跳过创建）
+    password: "" # 管理员密码（建议仅在开发环境填写）
+    role: admin # 管理员角色，默认 admin
 logging: # 日志输出配置
   level: info # 日志等级

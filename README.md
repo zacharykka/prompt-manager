@@ -57,11 +57,11 @@
    ```bash
    make test
    ```
-8. 默认管理员：首次启动会自动创建管理员账号 `admin/admin123`（部署后建议立即修改密码或通过后续管理界面创建新账号并删除默认账号）。
+8. 默认管理员：可在 `config/<env>.yaml` 的 `seed.admin` 节点中指定初始管理员邮箱/密码/角色，或使用兼容环境变量 `PROMPT_MANAGER_INIT_ADMIN_*`。若配置留空则不会自动创建账号；部署后务必及时更新或禁用默认管理员。
 9. 安全配置：运行前务必设置以下环境变量（可参考 `.env.example`）：
-   - `PROMPT_MANAGER_ACCESS_TOKEN_SECRET` / `PROMPT_MANAGER_REFRESH_TOKEN_SECRET`（≥32 字符）
-   - `PROMPT_MANAGER_API_KEY_HASH_SECRET`
-   - 可选：`PROMPT_MANAGER_INIT_ADMIN_EMAIL`、`PROMPT_MANAGER_INIT_ADMIN_PASSWORD`、`PROMPT_MANAGER_INIT_ADMIN_ROLE`
+   - `PROMPT_MANAGER_AUTH_ACCESS_TOKEN_SECRET` / `PROMPT_MANAGER_AUTH_REFRESH_TOKEN_SECRET`（≥32 字符）
+   - `PROMPT_MANAGER_AUTH_API_KEY_HASH_SECRET`
+   - 可选：`PROMPT_MANAGER_INIT_ADMIN_EMAIL`、`PROMPT_MANAGER_INIT_ADMIN_PASSWORD`、`PROMPT_MANAGER_INIT_ADMIN_ROLE`（会覆盖配置文件中的种子设置）
 10. 请求体限制：可通过 `server.maxRequestBody` 设置单次请求体上限（默认 3MB），也可在环境变量 `PROMPT_MANAGER_SERVER_MAXREQUESTBODY` 中覆写。
 
 ## 使用 Docker 部署
@@ -150,6 +150,7 @@
 - `config/default.yaml`：基础配置（端口、日志级别、JWT secret 占位）。
 - `config/development.yaml`：SQLite DSN、Redis 本地实例、调试级别日志。
 - `config/production.yaml`：PostgreSQL 连接、Redis 集群、日志采样、限流阈值。
+- `seed.admin`：可在各环境配置文件中写入初始管理员邮箱/密码/角色，留空则跳过；同名环境变量 `PROMPT_MANAGER_INIT_ADMIN_*` 可临时覆盖。
 - Viper 加载顺序：默认文件 → 环境特定文件 → 环境变量（`PROMPT_MANAGER_*`）。
 - 支持 `WATCH_CONFIG` 开关，实现配置热加载（刷新 Redis TTL、日志级别等）。
 

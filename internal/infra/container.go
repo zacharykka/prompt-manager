@@ -46,7 +46,7 @@ func Initialize(ctx context.Context, cfg *config.Config, logger *zap.Logger) (*C
 	}
 	container.Redis = redisClient
 
-	if err := ensureDefaultAdmin(ctx, container.Repos, logger); err != nil {
+	if err := ensureDefaultAdmin(ctx, cfg, container.Repos, logger); err != nil {
 		_ = db.Close()
 		_ = redisClient.Close()
 		return nil, nil, err
@@ -70,13 +70,28 @@ func Initialize(ctx context.Context, cfg *config.Config, logger *zap.Logger) (*C
 	return container, cleanup, nil
 }
 
-func ensureDefaultAdmin(ctx context.Context, repos *domain.Repositories, logger *zap.Logger) error {
-	email := strings.ToLower(strings.TrimSpace(os.Getenv("PROMPT_MANAGER_INIT_ADMIN_EMAIL")))
-	password := os.Getenv("PROMPT_MANAGER_INIT_ADMIN_PASSWORD")
-	role := strings.ToLower(strings.TrimSpace(os.Getenv("PROMPT_MANAGER_INIT_ADMIN_ROLE")))
+func ensureDefaultAdmin(ctx context.Context, cfg *config.Config, repos *domain.Repositories, logger *zap.Logger) error {
+	email := strings.ToLower(strings.TrimSpace(cfg.Seed.Admin.Email))
+	password := cfg.Seed.Admin.Password
+	role := strings.ToLower(strings.TrimSpace(cfg.Seed.Admin.Role))
+
+	// 向后兼容旧环境变量
+	legacyEmail := strings.ToLower(strings.TrimSpace(os.Getenv("PROMPT_MANAGER_INIT_ADMIN_EMAIL")))
+	legacyPassword := os.Getenv("PROMPT_MANAGER_INIT_ADMIN_PASSWORD")
+	legacyRole := strings.ToLower(strings.TrimSpace(os.Getenv("PROMPT_MANAGER_INIT_ADMIN_ROLE")))
+
+	if email == "" {
+		email = legacyEmail
+	}
+	if password == "" {
+		password = legacyPassword
+	}
+	if role == "" {
+		role = legacyRole
+	}
 
 	if email == "" || password == "" {
-		logger.Info("admin seeding skipped; PROMPT_MANAGER_INIT_ADMIN_EMAIL or PASSWORD not set")
+		logger.Info("admin seeding skipped; seed admin email or password not set")
 		return nil
 	}
 

@@ -27,6 +27,7 @@ type Config struct {
 	Redis    RedisConfig    `mapstructure:"redis"`
 	Auth     AuthConfig     `mapstructure:"auth"`
 	Logging  LoggingConfig  `mapstructure:"logging"`
+	Seed     SeedConfig     `mapstructure:"seed"`
 }
 
 // AppConfig 描述应用级别的元信息。
@@ -95,6 +96,18 @@ type AuthConfig struct {
 // LoggingConfig 控制日志输出级别等行为。
 type LoggingConfig struct {
 	Level string `mapstructure:"level"`
+}
+
+// SeedConfig 控制启动时的种子数据行为。
+type SeedConfig struct {
+	Admin SeedAdminConfig `mapstructure:"admin"`
+}
+
+// SeedAdminConfig 描述初始管理员账号信息。
+type SeedAdminConfig struct {
+	Email    string `mapstructure:"email"`
+	Password string `mapstructure:"password"`
+	Role     string `mapstructure:"role"`
 }
 
 // Load 从给定路径加载配置；若 env 为空会自动读取环境变量或回退到默认值。
@@ -244,6 +257,9 @@ func validateConfig(cfg *Config) error {
 	if err := validateSecurityHeaders(cfg.Server.SecurityHeaders); err != nil {
 		return err
 	}
+	if err := validateSeedConfig(cfg.Seed); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -275,6 +291,21 @@ func validateSecurityHeaders(secCfg SecurityHeadersConfig) error {
 	frame := strings.TrimSpace(strings.ToUpper(secCfg.FrameOptions))
 	if frame != "" && frame != "DENY" && frame != "SAMEORIGIN" {
 		return fmt.Errorf("config server.securityHeaders.frameOptions must be DENY or SAMEORIGIN when set")
+	}
+	return nil
+}
+
+func validateSeedConfig(seed SeedConfig) error {
+	admin := seed.Admin
+	if strings.TrimSpace(admin.Email) != "" || strings.TrimSpace(admin.Password) != "" {
+		email := strings.TrimSpace(admin.Email)
+		password := admin.Password
+		if email == "" {
+			return fmt.Errorf("config seed.admin.email must be set when seed.admin.password provided")
+		}
+		if password == "" {
+			return fmt.Errorf("config seed.admin.password must be set when seed.admin.email provided")
+		}
 	}
 	return nil
 }

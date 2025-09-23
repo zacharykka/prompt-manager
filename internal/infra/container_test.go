@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/zacharykka/prompt-manager/internal/config"
 	domain "github.com/zacharykka/prompt-manager/internal/domain"
 	"github.com/zacharykka/prompt-manager/internal/infra/database"
 	"github.com/zacharykka/prompt-manager/internal/infra/repository"
@@ -45,7 +46,8 @@ func TestEnsureDefaultAdminCreatesUser(t *testing.T) {
 	t.Setenv("PROMPT_MANAGER_INIT_ADMIN_PASSWORD", "super-secure-password-1234567890")
 	t.Setenv("PROMPT_MANAGER_INIT_ADMIN_ROLE", "editor")
 
-	if err := ensureDefaultAdmin(context.Background(), repos, zap.NewNop()); err != nil {
+	cfg := &config.Config{}
+	if err := ensureDefaultAdmin(context.Background(), cfg, repos, zap.NewNop()); err != nil {
 		t.Fatalf("ensureDefaultAdmin failed: %v", err)
 	}
 
@@ -65,10 +67,11 @@ func TestEnsureDefaultAdminIdempotent(t *testing.T) {
 	t.Setenv("PROMPT_MANAGER_INIT_ADMIN_EMAIL", "seed@example.com")
 	t.Setenv("PROMPT_MANAGER_INIT_ADMIN_PASSWORD", "super-secure-password-1234567890")
 
-	if err := ensureDefaultAdmin(context.Background(), repos, zap.NewNop()); err != nil {
+	cfg := &config.Config{}
+	if err := ensureDefaultAdmin(context.Background(), cfg, repos, zap.NewNop()); err != nil {
 		t.Fatalf("first call failed: %v", err)
 	}
-	if err := ensureDefaultAdmin(context.Background(), repos, zap.NewNop()); err != nil {
+	if err := ensureDefaultAdmin(context.Background(), cfg, repos, zap.NewNop()); err != nil {
 		t.Fatalf("second call failed: %v", err)
 	}
 }
@@ -80,10 +83,38 @@ func TestEnsureDefaultAdminSkippedWhenEnvMissing(t *testing.T) {
 	os.Unsetenv("PROMPT_MANAGER_INIT_ADMIN_EMAIL")
 	os.Unsetenv("PROMPT_MANAGER_INIT_ADMIN_PASSWORD")
 
-	if err := ensureDefaultAdmin(context.Background(), repos, zap.NewNop()); err != nil {
+	cfg := &config.Config{}
+	if err := ensureDefaultAdmin(context.Background(), cfg, repos, zap.NewNop()); err != nil {
 		t.Fatalf("should succeed even when env missing: %v", err)
 	}
 	if _, err := repos.Users.GetByEmail(context.Background(), "seed@example.com"); err == nil {
 		t.Fatalf("unexpected user created without env")
+	}
+}
+
+func TestEnsureDefaultAdminUsesConfig(t *testing.T) {
+	repos, cleanup := prepareTestRepo(t)
+	defer cleanup()
+
+	cfg := &config.Config{
+		Seed: config.SeedConfig{
+			Admin: config.SeedAdminConfig{
+				Email:    "config@example.com",
+				Password: "super-secure-password-1234567890",
+				Role:     "editor",
+			},
+		},
+	}
+
+	if err := ensureDefaultAdmin(context.Background(), cfg, repos, zap.NewNop()); err != nil {
+		t.Fatalf("ensureDefaultAdmin with config failed: %v", err)
+	}
+
+	user, err := repos.Users.GetByEmail(context.Background(), "config@example.com")
+	if err != nil {
+		t.Fatalf("expected user created from config: %v", err)
+	}
+	if user.Role != "editor" {
+		t.Fatalf("expected role editor got %s", user.Role)
 	}
 }

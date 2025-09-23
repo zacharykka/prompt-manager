@@ -131,3 +131,43 @@ auth:
 		t.Fatalf("expected wildcard origins to be rejected in production")
 	}
 }
+
+func TestLoadConfigSeedAdminFromConfig(t *testing.T) {
+	dir := t.TempDir()
+	writeConfig(t, dir, "default.yaml", `
+app:
+  name: test-app
+server:
+  host: 0.0.0.0
+database:
+  driver: sqlite
+redis:
+  addr: 127.0.0.1:6379
+auth:
+  accessTokenSecret: "abcdefghijklmnopqrstuvwxyz123456"
+  refreshTokenSecret: "abcdefghijklmnopqrstuvwxyz1234567890"
+  accessTokenTTL: 15m
+  refreshTokenTTL: 720h
+  apiKeyHashSecret: "abcdefghijklmnopqrstuvwxyz098765"
+seed:
+  admin:
+    email: admin@example.com
+    password: super-secret-password
+    role: editor
+`)
+
+	cfg, err := Load(dir, "")
+	if err != nil {
+		t.Fatalf("load config failed: %v", err)
+	}
+
+	if cfg.Seed.Admin.Email != "admin@example.com" {
+		t.Fatalf("expected seed admin email from config got %s", cfg.Seed.Admin.Email)
+	}
+	if cfg.Seed.Admin.Password != "super-secret-password" {
+		t.Fatalf("expected seed admin password from config")
+	}
+	if cfg.Seed.Admin.Role != "editor" {
+		t.Fatalf("expected seed admin role editor got %s", cfg.Seed.Admin.Role)
+	}
+}
