@@ -260,7 +260,8 @@ function normalizeTags(value: string | undefined): string[] | undefined {
   if (!value) {
     return undefined
   }
-  const parts = value
+  const normalized = value.replace(/[，、]/g, ',')
+  const parts = normalized
     .split(',')
     .map((item) => item.trim())
     .filter(Boolean)

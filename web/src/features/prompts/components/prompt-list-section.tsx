@@ -46,6 +46,16 @@ export function PromptListSection({ onCreatePrompt, onEditPrompt }: PromptListSe
     }
   }, [location, navigate])
 
+  useEffect(() => {
+    if (!feedback) {
+      return
+    }
+    const timer = window.setTimeout(() => {
+      setFeedback(null)
+    }, 6000)
+    return () => window.clearTimeout(timer)
+  }, [feedback])
+
   const {
     data,
     isLoading,

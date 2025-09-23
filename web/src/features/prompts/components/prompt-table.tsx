@@ -23,15 +23,15 @@ export function PromptTable({
     <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
       <table className="min-w-full divide-y divide-slate-200">
         <thead className="bg-slate-50">
-          <tr className="text-left text-sm font-semibold text-slate-600">
-            <th scope="col" className="px-4 py-3">名称</th>
-            <th scope="col" className="px-4 py-3">内容</th>
-            <th scope="col" className="px-4 py-3">标签</th>
-            <th scope="col" className="px-4 py-3">状态</th>
-            <th scope="col" className="px-4 py-3">更新人</th>
-            <th scope="col" className="px-4 py-3">更新时间</th>
+          <tr className="text-sm font-semibold text-slate-600">
+            <th scope="col" className="px-4 py-3 text-left">名称</th>
+            <th scope="col" className="px-4 py-3 text-left">内容</th>
+            <th scope="col" className="px-4 py-3 text-left whitespace-nowrap">标签</th>
+            <th scope="col" className="px-4 py-3 text-center whitespace-nowrap">状态</th>
+            <th scope="col" className="px-4 py-3 text-center whitespace-nowrap">更新人</th>
+            <th scope="col" className="px-4 py-3 text-center whitespace-nowrap">更新时间</th>
             {onDeletePrompt ? (
-              <th scope="col" className="px-4 py-3 text-right">操作</th>
+              <th scope="col" className="px-4 py-3 text-center whitespace-nowrap">操作</th>
             ) : null}
           </tr>
         </thead>
@@ -65,7 +65,7 @@ export function PromptTable({
                   <span className="text-xs text-slate-400">暂无内容</span>
                 )}
               </td>
-              <td className="px-4 py-3">
+              <td className="px-4 py-3 align-middle">
                 <div className="flex flex-wrap gap-2">
                   {prompt.tags.length > 0 ? (
                     prompt.tags.map((tag) => (
@@ -78,7 +78,7 @@ export function PromptTable({
                   )}
                 </div>
               </td>
-              <td className="px-4 py-3">
+              <td className="px-4 py-3 text-center align-middle whitespace-nowrap">
                 {prompt.status === 'deleted' ? (
                   <Badge variant="danger">已删除</Badge>
                 ) : prompt.activeVersionId ? (
@@ -87,14 +87,14 @@ export function PromptTable({
                   <Badge variant="neutral">草稿</Badge>
                 )}
               </td>
-              <td className="px-4 py-3 text-xs text-slate-500">
+              <td className="px-4 py-3 text-xs text-slate-500 text-center whitespace-nowrap align-middle">
                 {prompt.createdBy ?? '系统'}
               </td>
-              <td className="px-4 py-3 text-xs text-slate-500">
+              <td className="px-4 py-3 text-xs text-slate-500 text-center whitespace-nowrap align-middle">
                 {format(new Date(prompt.updatedAt), 'yyyy-MM-dd HH:mm')}
               </td>
               {onDeletePrompt ? (
-                <td className="px-4 py-3 text-right">
+                <td className="px-4 py-3 text-center whitespace-nowrap align-middle">
                   <Button
                     size="sm"
                     variant="ghost"
