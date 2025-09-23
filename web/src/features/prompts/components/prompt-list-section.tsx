@@ -1,11 +1,15 @@
 import { useState, type FormEvent } from 'react'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import type { AxiosError } from 'axios'
 
 import { Alert } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { PromptTable } from '@/features/prompts/components/prompt-table'
+import { DeletePromptDialog } from '@/features/prompts/components/delete-prompt-dialog'
+import { deletePrompt } from '@/features/prompts/api/delete-prompt'
 import { usePromptsQuery } from '@/features/prompts/hooks/use-prompts'
+import type { Prompt } from '@/features/prompts/types'
 
 const DEFAULT_LIMIT = 20
 
@@ -16,6 +20,17 @@ interface PromptListSectionProps {
 export function PromptListSection({ onCreatePrompt }: PromptListSectionProps) {
   const [searchInput, setSearchInput] = useState('')
   const [queryState, setQueryState] = useState({ search: '', offset: 0 })
+  const [feedback, setFeedback] = useState<
+    | {
+        type: 'success' | 'error'
+        message: string
+      }
+    | null
+  >(null)
+  const [deleteTarget, setDeleteTarget] = useState<Prompt | null>(null)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
+
+  const queryClient = useQueryClient()
 
   const {
     data,
@@ -71,8 +86,59 @@ export function PromptListSection({ onCreatePrompt }: PromptListSectionProps) {
     Math.floor((meta.offset ?? 0) / (meta.limit || DEFAULT_LIMIT)) + 1,
   )
 
+  const {
+    mutateAsync: deletePromptAsync,
+    isPending: isDeleting,
+  } = useMutation({
+    mutationFn: (promptId: string) => deletePrompt(promptId),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['prompts'] })
+    },
+  })
+
+  const handleDeletePrompt = (prompt: Prompt) => {
+    setDeleteError(null)
+    setDeleteTarget(prompt)
+  }
+
+  const handleConfirmDelete = async () => {
+    if (!deleteTarget) {
+      return
+    }
+    setDeleteError(null)
+    try {
+      await deletePromptAsync(deleteTarget.id)
+      setFeedback({ type: 'success', message: `Prompt “${deleteTarget.name}” 已删除。` })
+      setDeleteTarget(null)
+    } catch (error) {
+      const message = parseDeleteError(error)
+      setDeleteError(message)
+      setFeedback({ type: 'error', message })
+    }
+  }
+
+  const handleCloseDialog = () => {
+    if (isDeleting) {
+      return
+    }
+    setDeleteTarget(null)
+    setDeleteError(null)
+  }
+
   return (
     <div className="space-y-5">
+      {feedback ? (
+        <Alert
+          variant={feedback.type === 'success' ? 'success' : 'error'}
+          className="flex items-center justify-between gap-4"
+        >
+          <span>{feedback.message}</span>
+          <Button variant="ghost" size="sm" onClick={() => setFeedback(null)}>
+            知道了
+          </Button>
+        </Alert>
+      ) : null}
+
       <form
         onSubmit={handleSearchSubmit}
         className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm md:flex-row md:items-center md:justify-between"
@@ -113,7 +179,12 @@ export function PromptListSection({ onCreatePrompt }: PromptListSectionProps) {
         <PromptListEmpty onCreatePrompt={onCreatePrompt} onRefresh={() => refetch()} />
       ) : (
         <div className="space-y-4">
-          <PromptTable prompts={items} />
+          <PromptTable
+            prompts={items}
+            onDeletePrompt={handleDeletePrompt}
+            deletingPromptId={isDeleting ? deleteTarget?.id ?? null : null}
+            disableActions={isDeleting}
+          />
           <div className="flex flex-col gap-3 border-t border-slate-200 pt-4 md:flex-row md:items-center md:justify-between">
             <span className="text-sm text-slate-500">
               第 {currentPage} / {totalPages} 页
@@ -139,6 +210,15 @@ export function PromptListSection({ onCreatePrompt }: PromptListSectionProps) {
           </div>
         </div>
       )}
+
+      <DeletePromptDialog
+        open={Boolean(deleteTarget)}
+        prompt={deleteTarget}
+        errorMessage={deleteError}
+        isProcessing={isDeleting}
+        onCancel={handleCloseDialog}
+        onConfirm={handleConfirmDelete}
+      />
     </div>
   )
 }
@@ -165,6 +245,22 @@ function PromptListError({
         {isFetching ? '刷新中...' : '重新加载'}
       </Button>
     </div>
+  )
+}
+
+function parseDeleteError(error: unknown): string {
+  const axiosError = error as AxiosError<{ message?: string }> | undefined
+  const status = axiosError?.response?.status
+  if (status === 404) {
+    return '目标 Prompt 已删除或不存在。'
+  }
+  if (status === 403) {
+    return '您没有权限删除该 Prompt，请联系管理员。'
+  }
+  return (
+    axiosError?.response?.data?.message ??
+    axiosError?.message ??
+    '删除 Prompt 失败，请稍后重试。'
   )
 }
 

@@ -14,6 +14,8 @@ type RawPrompt = {
   active_version_id?: string | null
   body?: string | null
   created_by?: string | null
+  status?: string | null
+  deleted_at?: string | null
   created_at: string
   updated_at: string
 }
@@ -52,6 +54,7 @@ export async function listPrompts(
 }
 
 export function mapPrompt(raw: RawPrompt): Prompt {
+  const status = raw.status === 'deleted' ? 'deleted' : 'active'
   return {
     id: raw.id,
     name: raw.name,
@@ -62,6 +65,8 @@ export function mapPrompt(raw: RawPrompt): Prompt {
     createdBy: raw.created_by ?? null,
     createdAt: raw.created_at,
     updatedAt: raw.updated_at,
+    status,
+    deletedAt: raw.deleted_at ?? null,
   }
 }
 

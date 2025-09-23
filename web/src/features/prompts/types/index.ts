@@ -1,3 +1,5 @@
+export type PromptStatus = 'active' | 'deleted'
+
 export interface Prompt {
   id: string
   name: string
@@ -8,12 +10,15 @@ export interface Prompt {
   createdBy: string | null
   createdAt: string
   updatedAt: string
+  status: PromptStatus
+  deletedAt: string | null
 }
 
 export interface PromptListParams {
   limit?: number
   offset?: number
   search?: string
+  includeDeleted?: boolean
 }
 
 export interface PromptListMeta {
