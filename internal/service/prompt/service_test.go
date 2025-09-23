@@ -3,6 +3,7 @@ package prompt
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
@@ -192,5 +193,98 @@ func TestListPromptsWithSearch(t *testing.T) {
 	}
 	if len(secondPage) != 1 {
 		t.Fatalf("expected second page 1 item got %d", len(secondPage))
+	}
+}
+
+func TestUpdatePrompt(t *testing.T) {
+	svc, cleanup := setupPromptService(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	prompt, err := svc.CreatePrompt(ctx, CreatePromptInput{Name: "Original"})
+	if err != nil {
+		t.Fatalf("create prompt: %v", err)
+	}
+
+	second, err := svc.CreatePrompt(ctx, CreatePromptInput{Name: "Second"})
+	if err != nil {
+		t.Fatalf("create prompt second: %v", err)
+	}
+
+	newName := "Updated Name"
+	desc := "  Detail  "
+	tags := []string{"alpha", "beta"}
+	updated, err := svc.UpdatePrompt(ctx, UpdatePromptInput{
+		PromptID:    prompt.ID,
+		Name:        &newName,
+		Description: &desc,
+		Tags:        &tags,
+	})
+	if err != nil {
+		t.Fatalf("update prompt: %v", err)
+	}
+	if updated.Name != newName {
+		t.Fatalf("expected name %s got %s", newName, updated.Name)
+	}
+	if updated.Description == nil || *updated.Description != "Detail" {
+		t.Fatalf("expected trimmed description got %v", updated.Description)
+	}
+	var tagsResult []string
+	if err := json.Unmarshal(updated.Tags, &tagsResult); err != nil {
+		t.Fatalf("unmarshal tags: %v", err)
+	}
+	if len(tagsResult) != 2 || tagsResult[0] != "alpha" || tagsResult[1] != "beta" {
+		t.Fatalf("unexpected tags payload: %v", tagsResult)
+	}
+
+	// 清空描述与标签
+	emptyDesc := "  "
+	var nilTags []string
+	cleared, err := svc.UpdatePrompt(ctx, UpdatePromptInput{
+		PromptID:    prompt.ID,
+		Description: &emptyDesc,
+		Tags:        &nilTags,
+	})
+	if err != nil {
+		t.Fatalf("clear prompt fields: %v", err)
+	}
+	if cleared.Description != nil {
+		t.Fatalf("expected description cleared got %v", cleared.Description)
+	}
+	if len(cleared.Tags) != 0 {
+		t.Fatalf("expected tags cleared got %s", string(cleared.Tags))
+	}
+
+	// 重名校验
+	if _, err := svc.UpdatePrompt(ctx, UpdatePromptInput{PromptID: second.ID, Name: &newName}); err != ErrPromptAlreadyExists {
+		t.Fatalf("expected ErrPromptAlreadyExists got %v", err)
+	}
+
+	// 无字段更新
+	if _, err := svc.UpdatePrompt(ctx, UpdatePromptInput{PromptID: prompt.ID}); err != ErrNoFieldsToUpdate {
+		t.Fatalf("expected ErrNoFieldsToUpdate got %v", err)
+	}
+}
+
+func TestDeletePrompt(t *testing.T) {
+	svc, cleanup := setupPromptService(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	prompt, err := svc.CreatePrompt(ctx, CreatePromptInput{Name: "ToDelete"})
+	if err != nil {
+		t.Fatalf("create prompt: %v", err)
+	}
+
+	if err := svc.DeletePrompt(ctx, prompt.ID); err != nil {
+		t.Fatalf("delete prompt: %v", err)
+	}
+
+	if _, err := svc.GetPrompt(ctx, prompt.ID); err != ErrPromptNotFound {
+		t.Fatalf("expected ErrPromptNotFound got %v", err)
+	}
+
+	if err := svc.DeletePrompt(ctx, prompt.ID); err != ErrPromptNotFound {
+		t.Fatalf("expected ErrPromptNotFound on second delete got %v", err)
 	}
 }

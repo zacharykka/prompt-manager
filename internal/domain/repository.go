@@ -19,6 +19,8 @@ type PromptRepository interface {
 	List(ctx context.Context, opts PromptListOptions) ([]*Prompt, error)
 	Count(ctx context.Context, opts PromptListOptions) (int64, error)
 	UpdateActiveVersion(ctx context.Context, promptID string, versionID *string, body *string) error
+	Update(ctx context.Context, promptID string, params PromptUpdateParams) error
+	Delete(ctx context.Context, promptID string) error
 }
 
 // PromptVersionRepository 定义 Prompt 版本存取接口。
@@ -49,4 +51,14 @@ type PromptListOptions struct {
 	Limit  int
 	Offset int
 	Search string
+}
+
+// PromptUpdateParams 描述 Prompt 更新操作的可选字段。
+type PromptUpdateParams struct {
+	Name           *string
+	Description    *string
+	Tags           *string
+	HasName        bool
+	HasDescription bool
+	HasTags        bool
 }

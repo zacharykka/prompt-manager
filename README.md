@@ -108,17 +108,19 @@
 - `POST /api/v1/prompts`：创建 Prompt，可同时提交 `name`、`description`、`tags` 与初始 `body`，若提供正文会自动生成首个版本并设为已发布，同时将内容落入 `prompts.body` 字段。
 - `GET /api/v1/prompts`：分页查询 Prompt 列表，支持 `limit`、`offset`、`search`（按名称模糊匹配），返回 `items` 与 `meta.total/limit/offset/hasMore`，并包含当前激活版本正文 `body` 便于前端展示概要。
 - `GET /api/v1/prompts/{id}`：获取指定 Prompt 详情。
+- `PUT /api/v1/prompts/{id}` / `PATCH /api/v1/prompts/{id}`：更新 Prompt 元数据。支持局部更新 `name`、`description`、`tags`；请求体必须至少包含一个字段，`name` 会自动 Trim 并验证非空，`tags` 接受 0~10 个字符串条目。
 - `POST /api/v1/prompts/{id}/versions`：新增 Prompt 版本并可选设为激活。
 - `GET /api/v1/prompts/{id}/versions`：查看 Prompt 版本列表。
 - `POST /api/v1/prompts/{id}/versions/{versionId}/activate`：切换当前启用版本。
 - `GET /api/v1/prompts/{id}/stats`：查看最近若干天（默认 7 天）的执行统计。
+- `DELETE /api/v1/prompts/{id}`：删除 Prompt 及其所有历史版本。操作完成后再次访问会返回 `404`。
 - 其余业务 API 将在后续里程碑逐步实现。
 
 ### 认证流程说明
 1. **注册**：管理员调用 `/api/v1/auth/register` 创建用户，密码以 bcrypt 哈希存储。
 2. **登录**：用户凭凭证调用 `/api/v1/auth/login`，获得 `access_token` 与 `refresh_token`。
 3. **访问受保护资源**：将 `Authorization: Bearer <access_token>` 加入请求头，`AuthGuard` 校验令牌并在上下文注入 `user_id`、`user_role`。
-4. **权限**：写操作（创建/更新 Prompt、激活版本）需要 `admin` 或 `editor` 角色，查看操作允许任意登录用户。
+4. **权限**：写操作（创建/更新/删除 Prompt、激活版本）需要 `admin` 或 `editor` 角色，查看操作允许任意登录用户。
 5. **刷新令牌**：在访问令牌即将过期时，调用 `/api/v1/auth/refresh` 补发新的令牌。
 6. **统一错误格式**：所有认证相关接口返回 `code`、`message`、`details`，便于前端统一处理。
 

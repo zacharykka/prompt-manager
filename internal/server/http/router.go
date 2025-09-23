@@ -97,8 +97,11 @@ func NewEngine(cfg *config.Config, logger *zap.Logger, opts RouterOptions) *gin.
 		writeGroup.Use(middleware.RequireRoles(middleware.RoleAdmin, middleware.RoleEditor))
 		writeGroup.POST("", opts.PromptHandler.CreatePrompt)
 		writeGroup.POST("/", opts.PromptHandler.CreatePrompt)
+		writeGroup.PUT("/:id", opts.PromptHandler.UpdatePrompt)
+		writeGroup.PATCH("/:id", opts.PromptHandler.UpdatePrompt)
 		writeGroup.POST("/:id/versions", opts.PromptHandler.CreatePromptVersion)
 		writeGroup.POST("/:id/versions/:versionId/activate", opts.PromptHandler.SetActiveVersion)
+		writeGroup.DELETE("/:id", opts.PromptHandler.DeletePrompt)
 	}
 
 	logger.Info("http router ready", zap.String("env", cfg.App.Env))

@@ -28,10 +28,13 @@ func (h *PromptHandler) RegisterRoutes(rg *gin.RouterGroup) {
 	rg.GET("", h.ListPrompts)
 	rg.GET("/", h.ListPrompts)
 	rg.GET("/:id", h.GetPrompt)
+	rg.PUT("/:id", h.UpdatePrompt)
+	rg.PATCH("/:id", h.UpdatePrompt)
 	rg.POST("/:id/versions", h.CreatePromptVersion)
 	rg.GET("/:id/versions", h.ListPromptVersions)
 	rg.POST("/:id/versions/:versionId/activate", h.SetActiveVersion)
 	rg.GET("/:id/stats", h.GetPromptStats)
+	rg.DELETE("/:id", h.DeletePrompt)
 }
 
 type createPromptRequest struct {
@@ -39,6 +42,12 @@ type createPromptRequest struct {
 	Description *string  `json:"description"`
 	Tags        []string `json:"tags" binding:"max=10"`
 	Body        string   `json:"body" binding:"omitempty,min=1"`
+}
+
+type updatePromptRequest struct {
+	Name        *string   `json:"name" binding:"omitempty,min=1,max=128"`
+	Description *string   `json:"description"`
+	Tags        *[]string `json:"tags" binding:"max=10"`
 }
 
 type createPromptVersionRequest struct {
@@ -90,6 +99,33 @@ func (h *PromptHandler) CreatePrompt(ctx *gin.Context) {
 	}
 
 	httpx.RespondOK(ctx, gin.H{"prompt": prompt})
+}
+
+// UpdatePrompt 处理更新 Prompt 请求。
+func (h *PromptHandler) UpdatePrompt(ctx *gin.Context) {
+	var req updatePromptRequest
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		httpx.RespondError(ctx, http.StatusBadRequest, "INVALID_PAYLOAD", err.Error(), nil)
+		return
+	}
+
+	if req.Name == nil && req.Description == nil && req.Tags == nil {
+		httpx.RespondError(ctx, http.StatusBadRequest, "INVALID_PAYLOAD", "至少需要提供一个需要更新的字段", nil)
+		return
+	}
+
+	updated, err := h.service.UpdatePrompt(ctx, promptsvc.UpdatePromptInput{
+		PromptID:    ctx.Param("id"),
+		Name:        req.Name,
+		Description: req.Description,
+		Tags:        req.Tags,
+	})
+	if err != nil {
+		h.handleError(ctx, err)
+		return
+	}
+
+	httpx.RespondOK(ctx, gin.H{"prompt": updated})
 }
 
 // ListPrompts 列出 Prompt。
@@ -195,6 +231,16 @@ func (h *PromptHandler) GetPromptStats(ctx *gin.Context) {
 	httpx.RespondOK(ctx, gin.H{"items": stats})
 }
 
+// DeletePrompt 删除指定 Prompt。
+func (h *PromptHandler) DeletePrompt(ctx *gin.Context) {
+	if err := h.service.DeletePrompt(ctx, ctx.Param("id")); err != nil {
+		h.handleError(ctx, err)
+		return
+	}
+
+	httpx.RespondOK(ctx, gin.H{"prompt_id": ctx.Param("id")})
+}
+
 func (h *PromptHandler) handleError(ctx *gin.Context, err error) {
 	switch err {
 	case promptsvc.ErrNameRequired, promptsvc.ErrBodyRequired:
@@ -205,6 +251,8 @@ func (h *PromptHandler) handleError(ctx *gin.Context, err error) {
 		httpx.RespondError(ctx, http.StatusNotFound, "PROMPT_NOT_FOUND", err.Error(), nil)
 	case promptsvc.ErrVersionNotFound:
 		httpx.RespondError(ctx, http.StatusNotFound, "VERSION_NOT_FOUND", err.Error(), nil)
+	case promptsvc.ErrNoFieldsToUpdate:
+		httpx.RespondError(ctx, http.StatusBadRequest, "NO_FIELDS_TO_UPDATE", err.Error(), nil)
 	default:
 		httpx.RespondError(ctx, http.StatusInternalServerError, "INTERNAL_ERROR", err.Error(), nil)
 	}

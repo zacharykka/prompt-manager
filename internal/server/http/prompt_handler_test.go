@@ -172,6 +172,135 @@ func TestPromptHandler_CreateVersion(t *testing.T) {
 	}
 }
 
+func TestPromptHandler_Update(t *testing.T) {
+	handler, cleanup := setupPromptHandler(t)
+	defer cleanup()
+
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	router.Use(func(ctx *gin.Context) {
+		ctx.Set(middleware.UserContextKey, "tester")
+		ctx.Set(middleware.UserRoleContextKey, middleware.RoleAdmin)
+		ctx.Next()
+	})
+	handler.RegisterRoutes(router.Group("/prompts"))
+
+	createPayload := map[string]interface{}{"name": "Need Update"}
+	createBody, _ := json.Marshal(createPayload)
+	req := httptest.NewRequest(http.MethodPost, "/prompts", bytes.NewReader(createBody))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("create prompt failed: %d %s", rec.Code, rec.Body.String())
+	}
+
+	var resp struct {
+		Data struct {
+			Prompt struct {
+				ID string `json:"id"`
+			} `json:"prompt"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal response: %v", err)
+	}
+
+	updatePayload := map[string]interface{}{
+		"name":        "Updated",
+		"description": " detail ",
+		"tags":        []string{"x"},
+	}
+	updateBody, _ := json.Marshal(updatePayload)
+	updateReq := httptest.NewRequest(http.MethodPatch, "/prompts/"+resp.Data.Prompt.ID, bytes.NewReader(updateBody))
+	updateReq.Header.Set("Content-Type", "application/json")
+	updateRec := httptest.NewRecorder()
+	router.ServeHTTP(updateRec, updateReq)
+	if updateRec.Code != http.StatusOK {
+		t.Fatalf("update prompt failed: %d %s", updateRec.Code, updateRec.Body.String())
+	}
+
+	var updateResp struct {
+		Data struct {
+			Prompt struct {
+				Name        string          `json:"name"`
+				Description *string         `json:"description"`
+				Tags        json.RawMessage `json:"tags"`
+			} `json:"prompt"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(updateRec.Body.Bytes(), &updateResp); err != nil {
+		t.Fatalf("unmarshal update: %v", err)
+	}
+	if updateResp.Data.Prompt.Name != "Updated" {
+		t.Fatalf("expected updated name got %s", updateResp.Data.Prompt.Name)
+	}
+	if updateResp.Data.Prompt.Description == nil || *updateResp.Data.Prompt.Description != "detail" {
+		t.Fatalf("expected trimmed description got %v", updateResp.Data.Prompt.Description)
+	}
+	var tagList []string
+	if err := json.Unmarshal(updateResp.Data.Prompt.Tags, &tagList); err != nil || len(tagList) != 1 || tagList[0] != "x" {
+		t.Fatalf("unexpected tags: %s", string(updateResp.Data.Prompt.Tags))
+	}
+
+	noChangeReq := httptest.NewRequest(http.MethodPatch, "/prompts/"+resp.Data.Prompt.ID, bytes.NewReader([]byte(`{}`)))
+	noChangeReq.Header.Set("Content-Type", "application/json")
+	noChangeRec := httptest.NewRecorder()
+	router.ServeHTTP(noChangeRec, noChangeReq)
+	if noChangeRec.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 on empty update got %d", noChangeRec.Code)
+	}
+}
+
+func TestPromptHandler_Delete(t *testing.T) {
+	handler, cleanup := setupPromptHandler(t)
+	defer cleanup()
+
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	router.Use(func(ctx *gin.Context) {
+		ctx.Set(middleware.UserContextKey, "tester")
+		ctx.Set(middleware.UserRoleContextKey, middleware.RoleAdmin)
+		ctx.Next()
+	})
+	handler.RegisterRoutes(router.Group("/prompts"))
+
+	createPayload := map[string]interface{}{"name": "Delete Me"}
+	createBody, _ := json.Marshal(createPayload)
+	req := httptest.NewRequest(http.MethodPost, "/prompts", bytes.NewReader(createBody))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("create prompt failed: %d %s", rec.Code, rec.Body.String())
+	}
+
+	var resp struct {
+		Data struct {
+			Prompt struct {
+				ID string `json:"id"`
+			} `json:"prompt"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal response: %v", err)
+	}
+
+	deleteReq := httptest.NewRequest(http.MethodDelete, "/prompts/"+resp.Data.Prompt.ID, nil)
+	deleteRec := httptest.NewRecorder()
+	router.ServeHTTP(deleteRec, deleteReq)
+	if deleteRec.Code != http.StatusOK {
+		t.Fatalf("delete prompt failed: %d %s", deleteRec.Code, deleteRec.Body.String())
+	}
+
+	getReq := httptest.NewRequest(http.MethodGet, "/prompts/"+resp.Data.Prompt.ID, nil)
+	getRec := httptest.NewRecorder()
+	router.ServeHTTP(getRec, getReq)
+	if getRec.Code != http.StatusNotFound {
+		t.Fatalf("expected 404 after delete got %d", getRec.Code)
+	}
+}
+
 func TestPromptHandler_GetStats(t *testing.T) {
 	handler, cleanup := setupPromptHandler(t)
 	defer cleanup()

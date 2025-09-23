@@ -315,6 +315,75 @@ func (r *promptRepository) Count(ctx context.Context, opts domain.PromptListOpti
 	return total, nil
 }
 
+func (r *promptRepository) Update(ctx context.Context, promptID string, params domain.PromptUpdateParams) error {
+	ph := database.NewPlaceholderBuilder(r.dialect)
+	var sets []string
+	var args []interface{}
+
+	if params.HasName {
+		if params.Name == nil {
+			return fmt.Errorf("prompt name cannot be nil")
+		}
+		sets = append(sets, fmt.Sprintf("name = %s", ph.Next()))
+		args = append(args, *params.Name)
+	}
+	if params.HasDescription {
+		desc := sql.NullString{}
+		if params.Description != nil {
+			desc = sql.NullString{String: *params.Description, Valid: true}
+		}
+		sets = append(sets, fmt.Sprintf("description = %s", ph.Next()))
+		args = append(args, desc)
+	}
+	if params.HasTags {
+		tags := sql.NullString{}
+		if params.Tags != nil {
+			tags = sql.NullString{String: *params.Tags, Valid: true}
+		}
+		sets = append(sets, fmt.Sprintf("tags = %s", ph.Next()))
+		args = append(args, tags)
+	}
+
+	if len(sets) == 0 {
+		return nil
+	}
+
+	sets = append(sets, "updated_at = CURRENT_TIMESTAMP")
+	query := fmt.Sprintf("UPDATE prompts SET %s WHERE id = %s", strings.Join(sets, ", "), ph.Next())
+	args = append(args, promptID)
+
+	result, err := r.db.ExecContext(ctx, query, args...)
+	if err != nil {
+		return err
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rows == 0 {
+		return domain.ErrNotFound
+	}
+	return nil
+}
+
+func (r *promptRepository) Delete(ctx context.Context, promptID string) error {
+	ph := database.NewPlaceholderBuilder(r.dialect)
+	query := fmt.Sprintf("DELETE FROM prompts WHERE id = %s", ph.Next())
+
+	result, err := r.db.ExecContext(ctx, query, promptID)
+	if err != nil {
+		return err
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rows == 0 {
+		return domain.ErrNotFound
+	}
+	return nil
+}
+
 // ---- Prompt Version 仓储 ----
 
 type promptVersionRepository struct {

@@ -29,6 +29,14 @@ type CreatePromptInput struct {
 	CreatedBy   string
 }
 
+// UpdatePromptInput 定义更新 Prompt 所需的可选字段。
+type UpdatePromptInput struct {
+	PromptID    string
+	Name        *string
+	Description *string
+	Tags        *[]string
+}
+
 // CreatePrompt 创建新的 Prompt 记录。
 func (s *Service) CreatePrompt(ctx context.Context, input CreatePromptInput) (*domain.Prompt, error) {
 	name := strings.TrimSpace(input.Name)
@@ -97,6 +105,53 @@ func (s *Service) ListPrompts(ctx context.Context, opts ListPromptsOptions) ([]*
 	}
 
 	return prompts, total, nil
+}
+
+// UpdatePrompt 更新 Prompt 元数据。
+func (s *Service) UpdatePrompt(ctx context.Context, input UpdatePromptInput) (*domain.Prompt, error) {
+	updates := domain.PromptUpdateParams{}
+
+	if input.Name != nil {
+		name := strings.TrimSpace(*input.Name)
+		if name == "" {
+			return nil, ErrNameRequired
+		}
+		updates.HasName = true
+		updates.Name = &name
+	}
+
+	if input.Description != nil {
+		updates.HasDescription = true
+		updates.Description = optionalTrimmedString(input.Description)
+	}
+
+	if input.Tags != nil {
+		updates.HasTags = true
+		if *input.Tags != nil {
+			data, err := json.Marshal(*input.Tags)
+			if err != nil {
+				return nil, err
+			}
+			tagsStr := string(data)
+			updates.Tags = &tagsStr
+		}
+	}
+
+	if !updates.HasName && !updates.HasDescription && !updates.HasTags {
+		return nil, ErrNoFieldsToUpdate
+	}
+
+	if err := s.repos.Prompts.Update(ctx, input.PromptID, updates); err != nil {
+		if errors.Is(err, domain.ErrNotFound) {
+			return nil, ErrPromptNotFound
+		}
+		if isUniqueViolation(err) {
+			return nil, ErrPromptAlreadyExists
+		}
+		return nil, err
+	}
+
+	return s.GetPrompt(ctx, input.PromptID)
 }
 
 // GetPrompt 根据 ID 获取 Prompt。
@@ -233,6 +288,17 @@ func (s *Service) GetExecutionStats(ctx context.Context, promptID string, days i
 		return nil, err
 	}
 	return stats, nil
+}
+
+// DeletePrompt 删除指定 Prompt。
+func (s *Service) DeletePrompt(ctx context.Context, promptID string) error {
+	if err := s.repos.Prompts.Delete(ctx, promptID); err != nil {
+		if errors.Is(err, domain.ErrNotFound) {
+			return ErrPromptNotFound
+		}
+		return err
+	}
+	return nil
 }
 
 func optionalString(val string) *string {
