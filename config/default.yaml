@@ -1,30 +1,42 @@
-app:
-  name: prompt-manager
-  env: development
-server:
-  host: 0.0.0.0
-  port: 8080
-  readTimeout: 10s
-  writeTimeout: 10s
-  shutdownTimeout: 10s
-  maxRequestBody: 3145728 # Byte
-database:
-  driver: sqlite
-  dsn: file:./data/dev.db?cache=shared&_fk=1
-  maxOpen: 10
-  maxIdle: 5
-  connMaxLifetime: 300s
-redis:
-  addr: 127.0.0.1:6379
-  username: ""
-  password: ""
-  db: 0
-  poolSize: 10
-auth:
-  accessTokenSecret: ""
-  refreshTokenSecret: ""
-  accessTokenTTL: 15m
-  refreshTokenTTL: 720h
-  apiKeyHashSecret: ""
-logging:
-  level: info
+app: # 应用元信息配置
+  name: prompt-manager # 应用名称，便于日志与监控标识
+  env: development # 默认运行环境，用于控制运行模式
+server: # HTTP 服务端口与运行参数
+  host: 0.0.0.0 # 监听地址，0.0.0.0 表示接收所有网卡请求
+  port: 8080 # 监听端口
+  readTimeout: 10s # 读取请求的超时时间
+  writeTimeout: 10s # 响应写入超时时间
+  shutdownTimeout: 10s # 优雅关闭允许的最长时间
+  maxRequestBody: 3145728 # 允许的最大请求体字节数（单位：Byte）
+  cors: # 跨域访问控制
+    allowOrigins: # 允许跨域访问的前端来源列表，默认放行所有来源
+      - "*" # 全量放行，生产环境请覆盖为具体域名
+    allowCredentials: false # 是否允许携带 Cookie 等凭据
+  securityHeaders: # 全局安全响应头配置
+    frameOptions: DENY # X-Frame-Options 设置，防止点击劫持
+    contentTypeNosniff: true # 是否禁止浏览器 MIME 嗅探
+    referrerPolicy: no-referrer # Referrer-Policy 设置
+    xssProtection: "0" # X-XSS-Protection 设置，禁用过时防护
+    contentSecurityPolicy: "" # 可选 CSP 配置，默认关闭
+    crossOriginOpenerPolicy: same-origin # COOP 策略
+    crossOriginResourcePolicy: same-site # CORP 策略
+database: # 数据库连接配置
+  driver: sqlite # 使用的数据库驱动
+  dsn: file:./data/dev.db?cache=shared&_fk=1 # 数据源名称或连接字符串
+  maxOpen: 10 # 最大打开连接数
+  maxIdle: 5 # 最大空闲连接数
+  connMaxLifetime: 300s # 连接最大生命周期
+redis: # Redis 连接配置
+  addr: 127.0.0.1:6379 # Redis 地址与端口
+  username: "" # Redis 用户名
+  password: "" # Redis 密码
+  db: 0 # 使用的 Redis 数据库索引
+  poolSize: 10 # 连接池大小
+auth: # 认证与授权相关密钥
+  accessTokenSecret: "" # Access Token 签名密钥
+  refreshTokenSecret: "" # Refresh Token 签名密钥
+  accessTokenTTL: 15m # Access Token 有效期
+  refreshTokenTTL: 720h # Refresh Token 有效期
+  apiKeyHashSecret: "" # API Key 哈希盐值
+logging: # 日志输出配置
+  level: info # 日志等级

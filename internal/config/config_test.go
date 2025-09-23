@@ -47,6 +47,12 @@ logging:
 	if cfg.Logging.Level != "debug" {
 		t.Fatalf("expected logging level debug got %s", cfg.Logging.Level)
 	}
+	if got := cfg.Server.CORS.AllowOrigins; len(got) != 1 || got[0] != "*" {
+		t.Fatalf("expected default CORS allow origins to be ['*'] got %#v", got)
+	}
+	if !cfg.Server.SecurityHeaders.ContentTypeNosniff {
+		t.Fatalf("expected default content type nosniff to be true")
+	}
 }
 
 func TestLoadConfigInvalidSecrets(t *testing.T) {
@@ -96,5 +102,32 @@ auth:
 	}
 	if cfg.Server.MaxRequestBody != 5*1024*1024 {
 		t.Fatalf("expected 5MB got %d", cfg.Server.MaxRequestBody)
+	}
+}
+
+func TestLoadConfigRejectsWildcardOriginInProd(t *testing.T) {
+	dir := t.TempDir()
+	writeConfig(t, dir, "default.yaml", `
+app:
+  name: test-app
+  env: production
+server:
+  cors:
+    allowOrigins:
+      - "*"
+database:
+  driver: sqlite
+redis:
+  addr: 127.0.0.1:6379
+auth:
+  accessTokenSecret: "abcdefghijklmnopqrstuvwxyz123456"
+  refreshTokenSecret: "abcdefghijklmnopqrstuvwxyz1234567890"
+  accessTokenTTL: 15m
+  refreshTokenTTL: 720h
+  apiKeyHashSecret: "abcdefghijklmnopqrstuvwxyz098765"
+`)
+
+	if _, err := Load(dir, ""); err == nil {
+		t.Fatalf("expected wildcard origins to be rejected in production")
 	}
 }

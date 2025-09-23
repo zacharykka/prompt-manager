@@ -37,12 +37,32 @@ type AppConfig struct {
 
 // ServerConfig 负责 HTTP 服务相关配置。
 type ServerConfig struct {
-	Host            string        `mapstructure:"host"`
-	Port            int           `mapstructure:"port"`
-	ReadTimeout     time.Duration `mapstructure:"readTimeout"`
-	WriteTimeout    time.Duration `mapstructure:"writeTimeout"`
-	ShutdownTimeout time.Duration `mapstructure:"shutdownTimeout"`
-	MaxRequestBody  int64         `mapstructure:"maxRequestBody"`
+	Host            string                `mapstructure:"host"`
+	Port            int                   `mapstructure:"port"`
+	ReadTimeout     time.Duration         `mapstructure:"readTimeout"`
+	WriteTimeout    time.Duration         `mapstructure:"writeTimeout"`
+	ShutdownTimeout time.Duration         `mapstructure:"shutdownTimeout"`
+	MaxRequestBody  int64                 `mapstructure:"maxRequestBody"`
+	CORS            CORSConfig            `mapstructure:"cors"`
+	SecurityHeaders SecurityHeadersConfig `mapstructure:"securityHeaders"`
+}
+
+// CORSConfig 控制跨域访问白名单及相关选项。
+type CORSConfig struct {
+	AllowOrigins     []string `mapstructure:"allowOrigins"`
+	AllowCredentials bool     `mapstructure:"allowCredentials"`
+}
+
+// SecurityHeadersConfig 控制通用安全响应头的行为。
+type SecurityHeadersConfig struct {
+	FrameOptions              string `mapstructure:"frameOptions"`
+	ContentTypeNosniff        bool   `mapstructure:"contentTypeNosniff"`
+	ReferrerPolicy            string `mapstructure:"referrerPolicy"`
+	XSSProtection             string `mapstructure:"xssProtection"`
+	ContentSecurityPolicy     string `mapstructure:"contentSecurityPolicy"`
+	CrossOriginOpenerPolicy   string `mapstructure:"crossOriginOpenerPolicy"`
+	CrossOriginEmbedderPolicy string `mapstructure:"crossOriginEmbedderPolicy"`
+	CrossOriginResourcePolicy string `mapstructure:"crossOriginResourcePolicy"`
 }
 
 // DatabaseConfig 定义数据库连接选项，兼容 SQLite 与 PostgreSQL。
@@ -164,6 +184,27 @@ func applyDefaults(cfg *Config, env string) {
 	if cfg.Server.MaxRequestBody <= 0 {
 		cfg.Server.MaxRequestBody = 3 * 1024 * 1024
 	}
+	if len(cfg.Server.CORS.AllowOrigins) == 0 {
+		cfg.Server.CORS.AllowOrigins = []string{"*"}
+	}
+	if cfg.Server.SecurityHeaders.FrameOptions == "" {
+		cfg.Server.SecurityHeaders.FrameOptions = "DENY"
+	}
+	if cfg.Server.SecurityHeaders.ContentTypeNosniff == false {
+		cfg.Server.SecurityHeaders.ContentTypeNosniff = true
+	}
+	if cfg.Server.SecurityHeaders.ReferrerPolicy == "" {
+		cfg.Server.SecurityHeaders.ReferrerPolicy = "no-referrer"
+	}
+	if cfg.Server.SecurityHeaders.XSSProtection == "" {
+		cfg.Server.SecurityHeaders.XSSProtection = "0"
+	}
+	if cfg.Server.SecurityHeaders.CrossOriginOpenerPolicy == "" {
+		cfg.Server.SecurityHeaders.CrossOriginOpenerPolicy = "same-origin"
+	}
+	if cfg.Server.SecurityHeaders.CrossOriginResourcePolicy == "" {
+		cfg.Server.SecurityHeaders.CrossOriginResourcePolicy = "same-site"
+	}
 	if cfg.Database.Driver == "" {
 		cfg.Database.Driver = "sqlite"
 	}
@@ -197,6 +238,12 @@ func validateConfig(cfg *Config) error {
 	if err := validateSecret("auth.apiKeyHashSecret", cfg.Auth.APIKeyHashSecret); err != nil {
 		return err
 	}
+	if err := validateCORSConfig(cfg.Server.CORS, cfg.App.Env); err != nil {
+		return err
+	}
+	if err := validateSecurityHeaders(cfg.Server.SecurityHeaders); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -207,6 +254,27 @@ func validateSecret(field, secret string) error {
 	}
 	if strings.Contains(strings.ToLower(clean), "change-me") {
 		return fmt.Errorf("config %s must not use default placeholder", field)
+	}
+	return nil
+}
+
+func validateCORSConfig(corsCfg CORSConfig, env string) error {
+	for _, origin := range corsCfg.AllowOrigins {
+		clean := strings.TrimSpace(origin)
+		if clean == "" {
+			return fmt.Errorf("config server.cors.allowOrigins must not contain empty entries")
+		}
+		if env == "production" && clean == "*" {
+			return fmt.Errorf("config server.cors.allowOrigins must not use wildcard '*' in production")
+		}
+	}
+	return nil
+}
+
+func validateSecurityHeaders(secCfg SecurityHeadersConfig) error {
+	frame := strings.TrimSpace(strings.ToUpper(secCfg.FrameOptions))
+	if frame != "" && frame != "DENY" && frame != "SAMEORIGIN" {
+		return fmt.Errorf("config server.securityHeaders.frameOptions must be DENY or SAMEORIGIN when set")
 	}
 	return nil
 }

@@ -3,6 +3,8 @@ package http
 import (
 	"database/sql"
 	"net/http"
+	"regexp"
+	"strings"
 	"time"
 
 	"github.com/gin-contrib/cors"
@@ -44,18 +46,12 @@ func NewEngine(cfg *config.Config, logger *zap.Logger, opts RouterOptions) *gin.
 	engine := gin.New()
 
 	engine.Use(gin.Recovery())
+	engine.Use(middleware.SecurityHeaders(cfg.Server.SecurityHeaders))
 	if cfg.Server.MaxRequestBody > 0 {
 		engine.MaxMultipartMemory = cfg.Server.MaxRequestBody
 		engine.Use(middleware.LimitRequestBody(cfg.Server.MaxRequestBody))
 	}
-	corsConfig := cors.Config{
-		AllowOrigins:  []string{"*"},
-		AllowMethods:  []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
-		AllowHeaders:  []string{"Authorization", "Content-Type"},
-		ExposeHeaders: []string{"X-RateLimit-Limit", "X-RateLimit-Remaining", "X-RateLimit-Reset"},
-		MaxAge:        12 * time.Hour,
-	}
-	engine.Use(cors.New(corsConfig))
+	engine.Use(cors.New(buildCORSConfig(cfg.Server)))
 
 	for _, mw := range opts.Middlewares {
 		if mw != nil {
@@ -153,4 +149,71 @@ func defaultHealthHandler(cfg *config.Config, deps *HealthDependencies) gin.Hand
 
 		ctx.JSON(httpStatus, result)
 	}
+}
+
+func buildCORSConfig(serverCfg config.ServerConfig) cors.Config {
+	config := cors.Config{
+		AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
+		AllowHeaders:     []string{"Authorization", "Content-Type"},
+		ExposeHeaders:    []string{"X-RateLimit-Limit", "X-RateLimit-Remaining", "X-RateLimit-Reset"},
+		AllowCredentials: serverCfg.CORS.AllowCredentials,
+		MaxAge:           12 * time.Hour,
+	}
+
+	exactOrigins, patternOrigins, allowAll := classifyAllowedOrigins(serverCfg.CORS.AllowOrigins)
+	switch {
+	case allowAll:
+		config.AllowAllOrigins = true
+	case len(patternOrigins) == 0:
+		config.AllowOrigins = exactOrigins
+	default:
+		config.AllowOriginFunc = func(origin string) bool {
+			if origin == "" {
+				return false
+			}
+			for _, allowed := range exactOrigins {
+				if strings.EqualFold(origin, allowed) {
+					return true
+				}
+			}
+			for _, re := range patternOrigins {
+				if re.MatchString(origin) {
+					return true
+				}
+			}
+			return false
+		}
+	}
+
+	return config
+}
+
+func classifyAllowedOrigins(origins []string) (exact []string, patterns []*regexp.Regexp, allowAll bool) {
+	throttled := make(map[string]struct{})
+	for _, origin := range origins {
+		clean := strings.TrimSpace(origin)
+		if clean == "" {
+			continue
+		}
+		if clean == "*" {
+			return nil, nil, true
+		}
+		if strings.Contains(clean, "*") {
+			pattern := regexp.QuoteMeta(clean)
+			pattern = strings.ReplaceAll(pattern, "\\*", ".*")
+			re, err := regexp.Compile("^" + pattern + "$")
+			if err != nil {
+				continue
+			}
+			patterns = append(patterns, re)
+			continue
+		}
+		key := strings.ToLower(clean)
+		if _, ok := throttled[key]; ok {
+			continue
+		}
+		throttled[key] = struct{}{}
+		exact = append(exact, clean)
+	}
+	return exact, patterns, false
 }

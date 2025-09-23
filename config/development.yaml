@@ -1,11 +1,16 @@
-app:
-  env: development
-server:
-  port: 8080
-database:
-  driver: sqlite
-  dsn: file:./data/dev.db?cache=shared&_fk=1
-redis:
-  addr: 127.0.0.1:6379
-logging:
-  level: debug
+app: # 应用层配置
+  env: development # 强制运行环境为开发态
+server: # HTTP 服务配置
+  port: 8080 # 服务监听端口
+  cors: # CORS 白名单配置
+    allowOrigins: # 开发环境允许的前端来源
+      - "*" # 默认放行全部来源，必要时改为具体域名
+    allowCredentials: false # 是否允许附带认证信息
+  securityHeaders: # 安全响应头配置
+database: # 数据库配置
+  driver: sqlite # 使用嵌入式 SQLite
+  dsn: file:./data/dev.db?cache=shared&_fk=1 # SQLite 数据库文件路径
+redis: # Redis 配置
+  addr: 127.0.0.1:6379 # 本地 Redis 服务地址
+logging: # 日志配置
+  level: debug # 输出调试级日志

@@ -1,15 +1,27 @@
-app:
-  env: production
-server:
-  port: 8080
-database:
-  driver: postgres
-  dsn: postgres://prompt_manager:prompt_manager@postgres:5432/prompt_manager?sslmode=disable
-  maxOpen: 50
-  maxIdle: 25
-  connMaxLifetime: 900s
-redis:
-  addr: redis:6379
-  poolSize: 50
-logging:
-  level: warn
+app: # 应用层配置
+  env: production # 强制运行环境为生产态
+server: # HTTP 服务配置
+  port: 8080 # 服务监听端口
+  cors: # CORS 白名单配置
+    allowOrigins: # 允许访问的前端域名
+      - https://your-frontend.example.com # 生产前端域名示例，部署时请替换
+    allowCredentials: true # 是否允许跨域请求携带凭据
+  securityHeaders: # 安全响应头策略
+    frameOptions: DENY # 禁止页面被嵌入 iframe
+    contentTypeNosniff: true # 禁用浏览器 MIME 嗅探
+    referrerPolicy: no-referrer # 限制引用来源信息
+    xssProtection: "0" # 禁用过时的 X-XSS-Protection
+    contentSecurityPolicy: "" # 如需 CSP 请在此配置
+    crossOriginOpenerPolicy: same-origin # COOP 设置
+    crossOriginResourcePolicy: same-site # CORP 设置
+database: # 数据库连接配置
+  driver: postgres # 生产使用 PostgreSQL
+  dsn: postgres://prompt_manager:prompt_manager@postgres:5432/prompt_manager?sslmode=disable # PostgreSQL 连接串
+  maxOpen: 50 # 最大连接数
+  maxIdle: 25 # 最大空闲连接数
+  connMaxLifetime: 900s # 连接生命周期
+redis: # Redis 连接配置
+  addr: redis:6379 # Redis 服务地址
+  poolSize: 50 # 连接池大小
+logging: # 日志配置
+  level: warn # 生产环境日志等级
