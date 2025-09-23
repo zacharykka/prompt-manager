@@ -74,19 +74,41 @@ function parseTags(value: unknown): string[] {
   if (!value) {
     return []
   }
-  if (Array.isArray(value)) {
-    return value.filter((item): item is string => typeof item === 'string')
+
+  const normalizeList = (list: string[]): string[] => {
+    const seen = new Set<string>()
+    const result: string[] = []
+    list.forEach((item) => {
+      const pieces = item
+        .split(/[，、,]+/)
+        .map((part) => part.trim())
+        .filter(Boolean)
+      pieces.forEach((piece) => {
+        if (!seen.has(piece)) {
+          seen.add(piece)
+          result.push(piece)
+        }
+      })
+    })
+    return result
   }
+
+  if (Array.isArray(value)) {
+    return normalizeList(value.filter((item): item is string => typeof item === 'string'))
+  }
+
   if (typeof value === 'string') {
     try {
       const parsed = JSON.parse(value)
       if (Array.isArray(parsed)) {
-        return parsed.filter((item): item is string => typeof item === 'string')
+        return normalizeList(parsed.filter((item): item is string => typeof item === 'string'))
       }
     } catch {
-      return []
+      return normalizeList([value])
     }
+    return normalizeList([value])
   }
+
   return []
 }
 
