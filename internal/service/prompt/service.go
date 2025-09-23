@@ -85,6 +85,13 @@ func (s *Service) CreatePrompt(ctx context.Context, input CreatePromptInput) (*d
 			}
 			return nil, err
 		}
+		if len(tagsJSON) > 0 {
+			restored.Tags = tagsJSON
+		} else {
+			restored.Tags = nil
+		}
+		restored.Description = description
+		restored.CreatedBy = createdBy
 		created = restored
 	} else if existing != nil {
 		return nil, ErrPromptAlreadyExists
@@ -112,6 +119,14 @@ func (s *Service) CreatePrompt(ctx context.Context, input CreatePromptInput) (*d
 			return nil, err
 		}
 	}
+
+	if len(tagsJSON) > 0 {
+		created.Tags = tagsJSON
+	} else {
+		created.Tags = nil
+	}
+	created.Description = description
+	created.CreatedBy = createdBy
 
 	if created == nil {
 		return nil, ErrPromptNotFound
