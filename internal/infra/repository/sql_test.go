@@ -30,6 +30,14 @@ func setupTestDB(t *testing.T) (*sql.DB, func()) {
 	if _, err := db.Exec(string(migrationSQL)); err != nil {
 		t.Fatalf("exec migration: %v", err)
 	}
+	migration2Path := filepath.Join("..", "..", "..", "db", "migrations", "000002_add_prompt_body.up.sql")
+	migration2SQL, err := os.ReadFile(migration2Path)
+	if err != nil {
+		t.Fatalf("read migration 2: %v", err)
+	}
+	if _, err := db.Exec(string(migration2SQL)); err != nil {
+		t.Fatalf("exec migration 2: %v", err)
+	}
 
 	cleanup := func() {
 		_ = db.Close()
@@ -130,7 +138,8 @@ func TestPromptRepositories_Workflow(t *testing.T) {
 		t.Fatalf("expected latest version 1 got %d", latest)
 	}
 
-	if err := repos.Prompts.UpdateActiveVersion(ctx, promptID, &versionID); err != nil {
+	body := "Hello {{.city}}"
+	if err := repos.Prompts.UpdateActiveVersion(ctx, promptID, &versionID, &body); err != nil {
 		t.Fatalf("update active version: %v", err)
 	}
 
@@ -141,8 +150,8 @@ func TestPromptRepositories_Workflow(t *testing.T) {
 	if updatedPrompt.ActiveVersionID == nil || *updatedPrompt.ActiveVersionID != versionID {
 		t.Fatalf("expected active version %s got %v", versionID, updatedPrompt.ActiveVersionID)
 	}
-	if updatedPrompt.ActiveVersionBody == nil || *updatedPrompt.ActiveVersionBody != "Hello {{.city}}" {
-		t.Fatalf("expected active version body, got %v", updatedPrompt.ActiveVersionBody)
+	if updatedPrompt.Body == nil || *updatedPrompt.Body != "Hello {{.city}}" {
+		t.Fatalf("expected prompt body, got %v", updatedPrompt.Body)
 	}
 
 	execLog := &domain.PromptExecutionLog{

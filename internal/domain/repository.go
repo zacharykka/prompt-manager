@@ -18,7 +18,7 @@ type PromptRepository interface {
 	GetByID(ctx context.Context, promptID string) (*Prompt, error)
 	List(ctx context.Context, opts PromptListOptions) ([]*Prompt, error)
 	Count(ctx context.Context, opts PromptListOptions) (int64, error)
-	UpdateActiveVersion(ctx context.Context, promptID string, versionID *string) error
+	UpdateActiveVersion(ctx context.Context, promptID string, versionID *string, body *string) error
 }
 
 // PromptVersionRepository 定义 Prompt 版本存取接口。

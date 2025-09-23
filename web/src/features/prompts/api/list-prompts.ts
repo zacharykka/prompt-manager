@@ -12,7 +12,7 @@ type RawPrompt = {
   description?: string | null
   tags?: unknown
   active_version_id?: string | null
-  active_version_body?: string | null
+  body?: string | null
   created_by?: string | null
   created_at: string
   updated_at: string
@@ -58,7 +58,7 @@ export function mapPrompt(raw: RawPrompt): Prompt {
     description: raw.description ?? null,
     tags: parseTags(raw.tags),
     activeVersionId: raw.active_version_id ?? null,
-    activeVersionBody: raw.active_version_body ?? null,
+    body: raw.body ?? null,
     createdBy: raw.created_by ?? null,
     createdAt: raw.created_at,
     updatedAt: raw.updated_at,

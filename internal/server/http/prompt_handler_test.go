@@ -33,6 +33,14 @@ func setupPromptHandler(t *testing.T) (*PromptHandler, func()) {
 	if _, err := db.Exec(string(migrationSQL)); err != nil {
 		t.Fatalf("exec migration: %v", err)
 	}
+	migration2Path := filepath.Join("..", "..", "..", "db", "migrations", "000002_add_prompt_body.up.sql")
+	migration2SQL, err := os.ReadFile(migration2Path)
+	if err != nil {
+		t.Fatalf("read migration 2: %v", err)
+	}
+	if _, err := db.Exec(string(migration2SQL)); err != nil {
+		t.Fatalf("exec migration 2: %v", err)
+	}
 
 	repos := repository.NewSQLRepositories(db, database.NewDialect("sqlite"))
 	service := promptsvc.NewService(repos)
@@ -85,8 +93,8 @@ func TestPromptHandler_CreateAndList(t *testing.T) {
 	var listResp struct {
 		Data struct {
 			Items []struct {
-				Name string  `json:"name"`
-				Body *string `json:"active_version_body"`
+				Name string `json:"name"`
+				Body string `json:"body"`
 			} `json:"items"`
 			Meta struct {
 				Total   int  `json:"total"`
@@ -105,7 +113,7 @@ func TestPromptHandler_CreateAndList(t *testing.T) {
 	if len(listResp.Data.Items) != 1 || listResp.Data.Items[0].Name != "Greeting" {
 		t.Fatalf("unexpected list response: %s", listRec.Body.String())
 	}
-	if listResp.Data.Items[0].Body == nil || *listResp.Data.Items[0].Body != "Hello there" {
+	if listResp.Data.Items[0].Body != "Hello there" {
 		t.Fatalf("expected active version body, got %s", listRec.Body.String())
 	}
 }

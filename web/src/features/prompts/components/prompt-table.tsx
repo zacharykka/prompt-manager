@@ -35,10 +35,8 @@ export function PromptTable({ prompts }: PromptTableProps) {
                 </div>
               </td>
               <td className="max-w-md px-4 py-3">
-                {prompt.activeVersionBody ? (
-                  <p className="line-clamp-2 text-xs text-slate-600">
-                    {prompt.activeVersionBody}
-                  </p>
+                {prompt.body ? (
+                  <p className="line-clamp-2 text-xs text-slate-600">{prompt.body}</p>
                 ) : (
                   <span className="text-xs text-slate-400">暂无内容</span>
                 )}

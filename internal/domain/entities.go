@@ -19,15 +19,15 @@ type User struct {
 
 // Prompt 定义 Prompt 模板的元数据。
 type Prompt struct {
-	ID                string          `json:"id"`
-	Name              string          `json:"name"`
-	Description       *string         `json:"description,omitempty"`
-	Tags              json.RawMessage `json:"tags,omitempty"`
-	ActiveVersionID   *string         `json:"active_version_id,omitempty"`
-	ActiveVersionBody *string         `json:"active_version_body,omitempty"`
-	CreatedBy         *string         `json:"created_by,omitempty"`
-	CreatedAt         time.Time       `json:"created_at"`
-	UpdatedAt         time.Time       `json:"updated_at"`
+	ID              string          `json:"id"`
+	Name            string          `json:"name"`
+	Description     *string         `json:"description,omitempty"`
+	Tags            json.RawMessage `json:"tags,omitempty"`
+	ActiveVersionID *string         `json:"active_version_id,omitempty"`
+	Body            *string         `json:"body,omitempty"`
+	CreatedBy       *string         `json:"created_by,omitempty"`
+	CreatedAt       time.Time       `json:"created_at"`
+	UpdatedAt       time.Time       `json:"updated_at"`
 }
 
 // PromptVersion 记录 Prompt 的具体模板内容与变量信息。

@@ -167,18 +167,19 @@ func (s *Service) CreatePromptVersion(ctx context.Context, input CreatePromptVer
 		return nil, err
 	}
 
-	if input.Activate {
-		if err := s.repos.Prompts.UpdateActiveVersion(ctx, prompt.ID, &version.ID); err != nil {
-			return nil, err
-		}
-	}
-
 	created, err := s.repos.PromptVersions.GetByID(ctx, version.ID)
 	if err != nil {
 		if errors.Is(err, domain.ErrNotFound) {
 			return nil, ErrVersionNotFound
 		}
 		return nil, err
+	}
+
+	if input.Activate {
+		body := created.Body
+		if err := s.repos.Prompts.UpdateActiveVersion(ctx, prompt.ID, &created.ID, &body); err != nil {
+			return nil, err
+		}
 	}
 	return created, nil
 }
@@ -204,14 +205,16 @@ func (s *Service) SetActiveVersion(ctx context.Context, promptID, versionID stri
 		return err
 	}
 
-	if _, err := s.repos.PromptVersions.GetByID(ctx, versionID); err != nil {
+	version, err := s.repos.PromptVersions.GetByID(ctx, versionID)
+	if err != nil {
 		if errors.Is(err, domain.ErrNotFound) {
 			return ErrVersionNotFound
 		}
 		return err
 	}
 
-	return s.repos.Prompts.UpdateActiveVersion(ctx, promptID, &versionID)
+	body := version.Body
+	return s.repos.Prompts.UpdateActiveVersion(ctx, promptID, &versionID, &body)
 }
 
 // GetExecutionStats 返回最近若干天的执行统计。

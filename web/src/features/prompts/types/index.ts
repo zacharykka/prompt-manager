@@ -4,7 +4,7 @@ export interface Prompt {
   description: string | null
   tags: string[]
   activeVersionId: string | null
-  activeVersionBody: string | null
+  body: string | null
   createdBy: string | null
   createdAt: string
   updatedAt: string

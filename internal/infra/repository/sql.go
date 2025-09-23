@@ -123,7 +123,7 @@ type promptRow struct {
 	description     sql.NullString
 	tags            sql.NullString
 	activeVersionID sql.NullString
-	activeBody      sql.NullString
+	body            sql.NullString
 	createdBy       sql.NullString
 	createdAt       time.Time
 	updatedAt       time.Time
@@ -131,8 +131,8 @@ type promptRow struct {
 
 func (r *promptRepository) Create(ctx context.Context, prompt *domain.Prompt) error {
 	ph := database.NewPlaceholderBuilder(r.dialect)
-	query := fmt.Sprintf(`INSERT INTO prompts (id, name, description, tags, active_version_id, created_by)
-VALUES (%s, %s, %s, %s, %s, %s)`, ph.Next(), ph.Next(), ph.Next(), ph.Next(), ph.Next(), ph.Next())
+	query := fmt.Sprintf(`INSERT INTO prompts (id, name, description, tags, active_version_id, body, created_by)
+VALUES (%s, %s, %s, %s, %s, %s, %s)`, ph.Next(), ph.Next(), ph.Next(), ph.Next(), ph.Next(), ph.Next(), ph.Next())
 
 	desc := sql.NullString{}
 	if prompt.Description != nil {
@@ -146,24 +146,26 @@ VALUES (%s, %s, %s, %s, %s, %s)`, ph.Next(), ph.Next(), ph.Next(), ph.Next(), ph
 	if prompt.ActiveVersionID != nil {
 		active = sql.NullString{String: *prompt.ActiveVersionID, Valid: true}
 	}
+	body := sql.NullString{}
+	if prompt.Body != nil {
+		body = sql.NullString{String: *prompt.Body, Valid: true}
+	}
 	createdBy := sql.NullString{}
 	if prompt.CreatedBy != nil {
 		createdBy = sql.NullString{String: *prompt.CreatedBy, Valid: true}
 	}
 
-	_, err := r.db.ExecContext(ctx, query, prompt.ID, prompt.Name, desc, tags, active, createdBy)
+	_, err := r.db.ExecContext(ctx, query, prompt.ID, prompt.Name, desc, tags, active, body, createdBy)
 	return err
 }
 
 func (r *promptRepository) GetByID(ctx context.Context, promptID string) (*domain.Prompt, error) {
 	ph := database.NewPlaceholderBuilder(r.dialect)
-	query := fmt.Sprintf(`SELECT p.id, p.name, p.description, p.tags, p.active_version_id, pv.body, p.created_by, p.created_at, p.updated_at
-FROM prompts p
-LEFT JOIN prompt_versions pv ON pv.id = p.active_version_id
-WHERE p.id = %s`, ph.Next())
+	query := fmt.Sprintf(`SELECT id, name, description, tags, active_version_id, body, created_by, created_at, updated_at
+FROM prompts WHERE id = %s`, ph.Next())
 
 	var row promptRow
-	err := r.db.QueryRowContext(ctx, query, promptID).Scan(&row.id, &row.name, &row.description, &row.tags, &row.activeVersionID, &row.activeBody, &row.createdBy, &row.createdAt, &row.updatedAt)
+	err := r.db.QueryRowContext(ctx, query, promptID).Scan(&row.id, &row.name, &row.description, &row.tags, &row.activeVersionID, &row.body, &row.createdBy, &row.createdAt, &row.updatedAt)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, domain.ErrNotFound
@@ -186,8 +188,8 @@ WHERE p.id = %s`, ph.Next())
 	if row.activeVersionID.Valid {
 		prompt.ActiveVersionID = &row.activeVersionID.String
 	}
-	if row.activeBody.Valid {
-		prompt.ActiveVersionBody = &row.activeBody.String
+	if row.body.Valid {
+		prompt.Body = &row.body.String
 	}
 	if row.createdBy.Valid {
 		prompt.CreatedBy = &row.createdBy.String
@@ -210,8 +212,7 @@ func (r *promptRepository) List(ctx context.Context, opts domain.PromptListOptio
 	var builder strings.Builder
 	var args []interface{}
 
-	builder.WriteString(`SELECT p.id, p.name, p.description, p.tags, p.active_version_id, pv.body, p.created_by, p.created_at, p.updated_at FROM prompts p`)
-	builder.WriteString(` LEFT JOIN prompt_versions pv ON pv.id = p.active_version_id`)
+	builder.WriteString(`SELECT id, name, description, tags, active_version_id, body, created_by, created_at, updated_at FROM prompts`)
 
 	if search != "" {
 		builder.WriteString(" WHERE LOWER(name) LIKE ")
@@ -235,7 +236,7 @@ func (r *promptRepository) List(ctx context.Context, opts domain.PromptListOptio
 	var prompts []*domain.Prompt
 	for rows.Next() {
 		var row promptRow
-		if err := rows.Scan(&row.id, &row.name, &row.description, &row.tags, &row.activeVersionID, &row.activeBody, &row.createdBy, &row.createdAt, &row.updatedAt); err != nil {
+		if err := rows.Scan(&row.id, &row.name, &row.description, &row.tags, &row.activeVersionID, &row.body, &row.createdBy, &row.createdAt, &row.updatedAt); err != nil {
 			return nil, err
 		}
 		prompt := &domain.Prompt{
@@ -253,8 +254,8 @@ func (r *promptRepository) List(ctx context.Context, opts domain.PromptListOptio
 		if row.activeVersionID.Valid {
 			prompt.ActiveVersionID = &row.activeVersionID.String
 		}
-		if row.activeBody.Valid {
-			prompt.ActiveVersionBody = &row.activeBody.String
+		if row.body.Valid {
+			prompt.Body = &row.body.String
 		}
 		if row.createdBy.Valid {
 			prompt.CreatedBy = &row.createdBy.String
@@ -267,16 +268,20 @@ func (r *promptRepository) List(ctx context.Context, opts domain.PromptListOptio
 	return prompts, nil
 }
 
-func (r *promptRepository) UpdateActiveVersion(ctx context.Context, promptID string, versionID *string) error {
+func (r *promptRepository) UpdateActiveVersion(ctx context.Context, promptID string, versionID *string, body *string) error {
 	ph := database.NewPlaceholderBuilder(r.dialect)
-	query := fmt.Sprintf(`UPDATE prompts SET active_version_id = %s, updated_at = CURRENT_TIMESTAMP WHERE id = %s`, ph.Next(), ph.Next())
+	query := fmt.Sprintf(`UPDATE prompts SET active_version_id = %s, body = %s, updated_at = CURRENT_TIMESTAMP WHERE id = %s`, ph.Next(), ph.Next(), ph.Next())
 
 	active := sql.NullString{}
 	if versionID != nil {
 		active = sql.NullString{String: *versionID, Valid: true}
 	}
+	bodyValue := sql.NullString{}
+	if body != nil {
+		bodyValue = sql.NullString{String: *body, Valid: true}
+	}
 
-	result, err := r.db.ExecContext(ctx, query, active, promptID)
+	result, err := r.db.ExecContext(ctx, query, active, bodyValue, promptID)
 	if err != nil {
 		return err
 	}

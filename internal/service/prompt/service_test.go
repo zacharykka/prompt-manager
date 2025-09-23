@@ -29,6 +29,14 @@ func setupPromptService(t *testing.T) (*Service, func()) {
 	if _, err := db.Exec(string(migrationSQL)); err != nil {
 		t.Fatalf("exec migration: %v", err)
 	}
+	migration2Path := filepath.Join("..", "..", "..", "db", "migrations", "000002_add_prompt_body.up.sql")
+	migration2SQL, err := os.ReadFile(migration2Path)
+	if err != nil {
+		t.Fatalf("read migration 2: %v", err)
+	}
+	if _, err := db.Exec(string(migration2SQL)); err != nil {
+		t.Fatalf("exec migration 2: %v", err)
+	}
 
 	repos := repository.NewSQLRepositories(db, database.NewDialect("sqlite"))
 	svc := NewService(repos)
@@ -75,8 +83,8 @@ func TestCreatePromptAndVersion(t *testing.T) {
 	if updated.ActiveVersionID == nil || *updated.ActiveVersionID != version.ID {
 		t.Fatalf("expected active version to be %s", version.ID)
 	}
-	if updated.ActiveVersionBody == nil || *updated.ActiveVersionBody != "Hello, {{.name}}!" {
-		t.Fatalf("unexpected active version body: %v", updated.ActiveVersionBody)
+	if updated.Body == nil || *updated.Body != "Hello, {{.name}}!" {
+		t.Fatalf("unexpected prompt body: %v", updated.Body)
 	}
 
 	versions, err := svc.ListPromptVersions(context.Background(), prompt.ID, 10, 0)
