@@ -14,3 +14,9 @@ redis: # Redis 配置
   addr: 127.0.0.1:6379 # 本地 Redis 服务地址
 logging: # 日志配置
   level: debug # 输出调试级日志
+auth: # 认证与授权相关密钥
+  accessTokenSecret: "k5tFvoo5sfW3jfykKCxkQ8g4S46kwyUF" # Access Token 签名密钥
+  refreshTokenSecret: "k5tFvoo5sfW3jfykKCxkQ8g4S46kwyUF" # Refresh Token 签名密钥
+  accessTokenTTL: 180m # Access Token 有效期
+  refreshTokenTTL: 720h # Refresh Token 有效期
+  apiKeyHashSecret: "k5tFvoo5sfW3jfykKCxkQ8g4S46kwyUF" # API Key 哈希盐值
