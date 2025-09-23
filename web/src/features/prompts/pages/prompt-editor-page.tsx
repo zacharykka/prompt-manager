@@ -181,7 +181,7 @@ export function PromptEditorPage() {
   }
 
   return (
-    <div className="mx-auto max-w-4xl space-y-6">
+    <div className="mx-auto max-w-6xl space-y-8 px-4">
       <header className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold text-slate-900">{pageTitle}</h1>
@@ -196,7 +196,7 @@ export function PromptEditorPage() {
         </Button>
       </header>
 
-      <form onSubmit={submitHandler} className="space-y-6 rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
+      <form onSubmit={submitHandler} className="space-y-8 rounded-2xl border border-slate-200 bg-white p-10 shadow-sm">
         {submitError ? <Alert variant="error">{submitError}</Alert> : null}
 
         <div className="grid gap-6 md:grid-cols-2">
@@ -221,10 +221,9 @@ export function PromptEditorPage() {
           <label className="block text-sm font-medium text-slate-700" htmlFor="prompt-description">
             描述（可选）
           </label>
-          <Textarea
+          <Input
             id="prompt-description"
             placeholder="简要描述用途，方便团队快速理解"
-            rows={4}
             {...register('description')}
           />
           {errors.description ? (
@@ -239,7 +238,7 @@ export function PromptEditorPage() {
           <Textarea
             id="prompt-body"
             placeholder="编写 Prompt 正文，支持模板变量"
-            rows={14}
+            rows={18}
             {...register('body')}
           />
           {errors.body ? <p className="text-xs text-red-600">{errors.body.message}</p> : null}
