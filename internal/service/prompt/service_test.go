@@ -38,6 +38,14 @@ func setupPromptService(t *testing.T) (*Service, func()) {
 	if _, err := db.Exec(string(migration2SQL)); err != nil {
 		t.Fatalf("exec migration 2: %v", err)
 	}
+	migration3Path := filepath.Join("..", "..", "..", "db", "migrations", "000003_prompt_soft_delete.up.sql")
+	migration3SQL, err := os.ReadFile(migration3Path)
+	if err != nil {
+		t.Fatalf("read migration 3: %v", err)
+	}
+	if _, err := db.Exec(string(migration3SQL)); err != nil {
+		t.Fatalf("exec migration 3: %v", err)
+	}
 
 	repos := repository.NewSQLRepositories(db, database.NewDialect("sqlite"))
 	svc := NewService(repos)
@@ -276,15 +284,29 @@ func TestDeletePrompt(t *testing.T) {
 		t.Fatalf("create prompt: %v", err)
 	}
 
-	if err := svc.DeletePrompt(ctx, prompt.ID); err != nil {
+	if err := svc.DeletePrompt(ctx, prompt.ID, "tester"); err != nil {
 		t.Fatalf("delete prompt: %v", err)
+	}
+
+	logs, err := svc.repos.PromptAuditLog.ListByPrompt(ctx, prompt.ID, 10)
+	if err != nil {
+		t.Fatalf("list audit logs: %v", err)
+	}
+	if len(logs) != 1 {
+		t.Fatalf("expected 1 audit log got %d", len(logs))
+	}
+	if logs[0].Action != "prompt.deleted" {
+		t.Fatalf("unexpected audit action %s", logs[0].Action)
+	}
+	if logs[0].CreatedBy == nil || *logs[0].CreatedBy != "tester" {
+		t.Fatalf("expected audit actor tester got %v", logs[0].CreatedBy)
 	}
 
 	if _, err := svc.GetPrompt(ctx, prompt.ID); err != ErrPromptNotFound {
 		t.Fatalf("expected ErrPromptNotFound got %v", err)
 	}
 
-	if err := svc.DeletePrompt(ctx, prompt.ID); err != ErrPromptNotFound {
+	if err := svc.DeletePrompt(ctx, prompt.ID, "tester"); err != ErrPromptNotFound {
 		t.Fatalf("expected ErrPromptNotFound on second delete got %v", err)
 	}
 }

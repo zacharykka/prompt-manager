@@ -233,7 +233,8 @@ func (h *PromptHandler) GetPromptStats(ctx *gin.Context) {
 
 // DeletePrompt 删除指定 Prompt。
 func (h *PromptHandler) DeletePrompt(ctx *gin.Context) {
-	if err := h.service.DeletePrompt(ctx, ctx.Param("id")); err != nil {
+	deletedBy := ctx.GetString(middleware.UserContextKey)
+	if err := h.service.DeletePrompt(ctx, ctx.Param("id"), deletedBy); err != nil {
 		h.handleError(ctx, err)
 		return
 	}

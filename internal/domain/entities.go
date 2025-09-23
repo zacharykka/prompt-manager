@@ -26,6 +26,8 @@ type Prompt struct {
 	ActiveVersionID *string         `json:"active_version_id,omitempty"`
 	Body            *string         `json:"body,omitempty"`
 	CreatedBy       *string         `json:"created_by,omitempty"`
+	Status          string          `json:"status"`
+	DeletedAt       *time.Time      `json:"deleted_at,omitempty"`
 	CreatedAt       time.Time       `json:"created_at"`
 	UpdatedAt       time.Time       `json:"updated_at"`
 }
@@ -62,4 +64,14 @@ type PromptExecutionAggregate struct {
 	TotalCalls    int       `json:"total_calls"`
 	SuccessCalls  int       `json:"success_calls"`
 	AverageMillis float64   `json:"average_ms"`
+}
+
+// PromptAuditLog 记录 Prompt 相关的审计事件。
+type PromptAuditLog struct {
+	ID        string          `json:"id"`
+	PromptID  string          `json:"prompt_id"`
+	Action    string          `json:"action"`
+	Payload   json.RawMessage `json:"payload,omitempty"`
+	CreatedBy *string         `json:"created_by,omitempty"`
+	CreatedAt time.Time       `json:"created_at"`
 }

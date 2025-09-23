@@ -41,6 +41,14 @@ func setupPromptHandler(t *testing.T) (*PromptHandler, func()) {
 	if _, err := db.Exec(string(migration2SQL)); err != nil {
 		t.Fatalf("exec migration 2: %v", err)
 	}
+	migration3Path := filepath.Join("..", "..", "..", "db", "migrations", "000003_prompt_soft_delete.up.sql")
+	migration3SQL, err := os.ReadFile(migration3Path)
+	if err != nil {
+		t.Fatalf("read migration 3: %v", err)
+	}
+	if _, err := db.Exec(string(migration3SQL)); err != nil {
+		t.Fatalf("exec migration 3: %v", err)
+	}
 
 	repos := repository.NewSQLRepositories(db, database.NewDialect("sqlite"))
 	service := promptsvc.NewService(repos)

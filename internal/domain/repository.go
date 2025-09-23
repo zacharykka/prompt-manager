@@ -38,19 +38,27 @@ type PromptExecutionLogRepository interface {
 	AggregateUsage(ctx context.Context, promptID string, from time.Time) ([]*PromptExecutionAggregate, error)
 }
 
+// PromptAuditLogRepository 定义 Prompt 审计日志存取接口。
+type PromptAuditLogRepository interface {
+	Create(ctx context.Context, log *PromptAuditLog) error
+	ListByPrompt(ctx context.Context, promptID string, limit int) ([]*PromptAuditLog, error)
+}
+
 // Repositories 聚合全部仓储接口，便于依赖注入。
 type Repositories struct {
 	Users              UserRepository
 	Prompts            PromptRepository
 	PromptVersions     PromptVersionRepository
 	PromptExecutionLog PromptExecutionLogRepository
+	PromptAuditLog     PromptAuditLogRepository
 }
 
 // PromptListOptions 定义 Prompt 列表过滤与分页参数。
 type PromptListOptions struct {
-	Limit  int
-	Offset int
-	Search string
+	Limit          int
+	Offset         int
+	Search         string
+	IncludeDeleted bool
 }
 
 // PromptUpdateParams 描述 Prompt 更新操作的可选字段。

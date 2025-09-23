@@ -18,12 +18,14 @@ func NewSQLRepositories(db *sql.DB, dialect database.Dialect) *domain.Repositori
 	promptRepo := &promptRepository{db: db, dialect: dialect}
 	promptVersionRepo := &promptVersionRepository{db: db, dialect: dialect}
 	execLogRepo := &promptExecutionLogRepository{db: db, dialect: dialect}
+	auditRepo := &promptAuditLogRepository{db: db, dialect: dialect}
 
 	return &domain.Repositories{
 		Users:              userRepo,
 		Prompts:            promptRepo,
 		PromptVersions:     promptVersionRepo,
 		PromptExecutionLog: execLogRepo,
+		PromptAuditLog:     auditRepo,
 	}
 }
 
@@ -125,6 +127,8 @@ type promptRow struct {
 	activeVersionID sql.NullString
 	body            sql.NullString
 	createdBy       sql.NullString
+	status          string
+	deletedAt       sql.NullTime
 	createdAt       time.Time
 	updatedAt       time.Time
 }
@@ -161,11 +165,11 @@ VALUES (%s, %s, %s, %s, %s, %s, %s)`, ph.Next(), ph.Next(), ph.Next(), ph.Next()
 
 func (r *promptRepository) GetByID(ctx context.Context, promptID string) (*domain.Prompt, error) {
 	ph := database.NewPlaceholderBuilder(r.dialect)
-	query := fmt.Sprintf(`SELECT id, name, description, tags, active_version_id, body, created_by, created_at, updated_at
-FROM prompts WHERE id = %s`, ph.Next())
+	query := fmt.Sprintf(`SELECT id, name, description, tags, active_version_id, body, created_by, status, deleted_at, created_at, updated_at
+FROM prompts WHERE id = %s AND deleted_at IS NULL`, ph.Next())
 
 	var row promptRow
-	err := r.db.QueryRowContext(ctx, query, promptID).Scan(&row.id, &row.name, &row.description, &row.tags, &row.activeVersionID, &row.body, &row.createdBy, &row.createdAt, &row.updatedAt)
+	err := r.db.QueryRowContext(ctx, query, promptID).Scan(&row.id, &row.name, &row.description, &row.tags, &row.activeVersionID, &row.body, &row.createdBy, &row.status, &row.deletedAt, &row.createdAt, &row.updatedAt)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, domain.ErrNotFound
@@ -178,6 +182,7 @@ FROM prompts WHERE id = %s`, ph.Next())
 		Name:      row.name,
 		CreatedAt: row.createdAt,
 		UpdatedAt: row.updatedAt,
+		Status:    row.status,
 	}
 	if row.description.Valid {
 		prompt.Description = &row.description.String
@@ -193,6 +198,9 @@ FROM prompts WHERE id = %s`, ph.Next())
 	}
 	if row.createdBy.Valid {
 		prompt.CreatedBy = &row.createdBy.String
+	}
+	if row.deletedAt.Valid {
+		prompt.DeletedAt = &row.deletedAt.Time
 	}
 	return prompt, nil
 }
@@ -211,13 +219,21 @@ func (r *promptRepository) List(ctx context.Context, opts domain.PromptListOptio
 	ph := database.NewPlaceholderBuilder(r.dialect)
 	var builder strings.Builder
 	var args []interface{}
+	var conditions []string
 
-	builder.WriteString(`SELECT id, name, description, tags, active_version_id, body, created_by, created_at, updated_at FROM prompts`)
+	builder.WriteString(`SELECT id, name, description, tags, active_version_id, body, created_by, status, deleted_at, created_at, updated_at FROM prompts`)
 
+	if !opts.IncludeDeleted {
+		conditions = append(conditions, "deleted_at IS NULL")
+	}
 	if search != "" {
-		builder.WriteString(" WHERE LOWER(name) LIKE ")
-		builder.WriteString(ph.Next())
+		conditions = append(conditions, fmt.Sprintf("LOWER(name) LIKE %s", ph.Next()))
 		args = append(args, fmt.Sprintf("%%%s%%", search))
+	}
+
+	if len(conditions) > 0 {
+		builder.WriteString(" WHERE ")
+		builder.WriteString(strings.Join(conditions, " AND "))
 	}
 
 	builder.WriteString(" ORDER BY updated_at DESC LIMIT ")
@@ -236,7 +252,7 @@ func (r *promptRepository) List(ctx context.Context, opts domain.PromptListOptio
 	var prompts []*domain.Prompt
 	for rows.Next() {
 		var row promptRow
-		if err := rows.Scan(&row.id, &row.name, &row.description, &row.tags, &row.activeVersionID, &row.body, &row.createdBy, &row.createdAt, &row.updatedAt); err != nil {
+		if err := rows.Scan(&row.id, &row.name, &row.description, &row.tags, &row.activeVersionID, &row.body, &row.createdBy, &row.status, &row.deletedAt, &row.createdAt, &row.updatedAt); err != nil {
 			return nil, err
 		}
 		prompt := &domain.Prompt{
@@ -244,6 +260,7 @@ func (r *promptRepository) List(ctx context.Context, opts domain.PromptListOptio
 			Name:      row.name,
 			CreatedAt: row.createdAt,
 			UpdatedAt: row.updatedAt,
+			Status:    row.status,
 		}
 		if row.description.Valid {
 			prompt.Description = &row.description.String
@@ -260,6 +277,9 @@ func (r *promptRepository) List(ctx context.Context, opts domain.PromptListOptio
 		if row.createdBy.Valid {
 			prompt.CreatedBy = &row.createdBy.String
 		}
+		if row.deletedAt.Valid {
+			prompt.DeletedAt = &row.deletedAt.Time
+		}
 		prompts = append(prompts, prompt)
 	}
 	if err := rows.Err(); err != nil {
@@ -270,7 +290,7 @@ func (r *promptRepository) List(ctx context.Context, opts domain.PromptListOptio
 
 func (r *promptRepository) UpdateActiveVersion(ctx context.Context, promptID string, versionID *string, body *string) error {
 	ph := database.NewPlaceholderBuilder(r.dialect)
-	query := fmt.Sprintf(`UPDATE prompts SET active_version_id = %s, body = %s, updated_at = CURRENT_TIMESTAMP WHERE id = %s`, ph.Next(), ph.Next(), ph.Next())
+	query := fmt.Sprintf(`UPDATE prompts SET active_version_id = %s, body = %s, updated_at = CURRENT_TIMESTAMP WHERE id = %s AND deleted_at IS NULL`, ph.Next(), ph.Next(), ph.Next())
 
 	active := sql.NullString{}
 	if versionID != nil {
@@ -300,12 +320,19 @@ func (r *promptRepository) Count(ctx context.Context, opts domain.PromptListOpti
 	ph := database.NewPlaceholderBuilder(r.dialect)
 	var builder strings.Builder
 	var args []interface{}
+	var conditions []string
 
 	builder.WriteString("SELECT COUNT(1) FROM prompts")
+	if !opts.IncludeDeleted {
+		conditions = append(conditions, "deleted_at IS NULL")
+	}
 	if search != "" {
-		builder.WriteString(" WHERE LOWER(name) LIKE ")
-		builder.WriteString(ph.Next())
+		conditions = append(conditions, fmt.Sprintf("LOWER(name) LIKE %s", ph.Next()))
 		args = append(args, fmt.Sprintf("%%%s%%", search))
+	}
+	if len(conditions) > 0 {
+		builder.WriteString(" WHERE ")
+		builder.WriteString(strings.Join(conditions, " AND "))
 	}
 
 	var total int64
@@ -349,7 +376,7 @@ func (r *promptRepository) Update(ctx context.Context, promptID string, params d
 	}
 
 	sets = append(sets, "updated_at = CURRENT_TIMESTAMP")
-	query := fmt.Sprintf("UPDATE prompts SET %s WHERE id = %s", strings.Join(sets, ", "), ph.Next())
+	query := fmt.Sprintf("UPDATE prompts SET %s WHERE id = %s AND deleted_at IS NULL", strings.Join(sets, ", "), ph.Next())
 	args = append(args, promptID)
 
 	result, err := r.db.ExecContext(ctx, query, args...)
@@ -368,7 +395,7 @@ func (r *promptRepository) Update(ctx context.Context, promptID string, params d
 
 func (r *promptRepository) Delete(ctx context.Context, promptID string) error {
 	ph := database.NewPlaceholderBuilder(r.dialect)
-	query := fmt.Sprintf("DELETE FROM prompts WHERE id = %s", ph.Next())
+	query := fmt.Sprintf(`UPDATE prompts SET status = 'deleted', deleted_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = %s AND deleted_at IS NULL`, ph.Next())
 
 	result, err := r.db.ExecContext(ctx, query, promptID)
 	if err != nil {
@@ -668,4 +695,78 @@ func (r *promptExecutionLogRepository) AggregateUsage(ctx context.Context, promp
 	}
 
 	return stats, nil
+}
+
+// ---- Prompt 审计日志仓储 ----
+
+type promptAuditLogRepository struct {
+	db      *sql.DB
+	dialect database.Dialect
+}
+
+type promptAuditRow struct {
+	id        string
+	promptID  string
+	action    string
+	payload   sql.NullString
+	createdBy sql.NullString
+	createdAt time.Time
+}
+
+func (r *promptAuditLogRepository) Create(ctx context.Context, log *domain.PromptAuditLog) error {
+	ph := database.NewPlaceholderBuilder(r.dialect)
+	query := fmt.Sprintf(`INSERT INTO prompt_audit_logs (id, prompt_id, action, payload, created_by)
+VALUES (%s, %s, %s, %s, %s)`, ph.Next(), ph.Next(), ph.Next(), ph.Next(), ph.Next())
+
+	payload := sql.NullString{}
+	if len(log.Payload) > 0 {
+		payload = sql.NullString{String: string(log.Payload), Valid: true}
+	}
+	createdBy := sql.NullString{}
+	if log.CreatedBy != nil {
+		createdBy = sql.NullString{String: *log.CreatedBy, Valid: true}
+	}
+
+	_, err := r.db.ExecContext(ctx, query, log.ID, log.PromptID, log.Action, payload, createdBy)
+	return err
+}
+
+func (r *promptAuditLogRepository) ListByPrompt(ctx context.Context, promptID string, limit int) ([]*domain.PromptAuditLog, error) {
+	if limit <= 0 {
+		limit = 20
+	}
+	ph := database.NewPlaceholderBuilder(r.dialect)
+	query := fmt.Sprintf(`SELECT id, prompt_id, action, payload, created_by, created_at
+FROM prompt_audit_logs WHERE prompt_id = %s ORDER BY created_at DESC LIMIT %s`, ph.Next(), ph.Next())
+
+	rows, err := r.db.QueryContext(ctx, query, promptID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var logs []*domain.PromptAuditLog
+	for rows.Next() {
+		var row promptAuditRow
+		if err := rows.Scan(&row.id, &row.promptID, &row.action, &row.payload, &row.createdBy, &row.createdAt); err != nil {
+			return nil, err
+		}
+		log := &domain.PromptAuditLog{
+			ID:        row.id,
+			PromptID:  row.promptID,
+			Action:    row.action,
+			CreatedAt: row.createdAt,
+		}
+		if row.payload.Valid {
+			log.Payload = json.RawMessage(row.payload.String)
+		}
+		if row.createdBy.Valid {
+			log.CreatedBy = &row.createdBy.String
+		}
+		logs = append(logs, log)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return logs, nil
 }

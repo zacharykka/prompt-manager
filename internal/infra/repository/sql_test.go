@@ -38,6 +38,14 @@ func setupTestDB(t *testing.T) (*sql.DB, func()) {
 	if _, err := db.Exec(string(migration2SQL)); err != nil {
 		t.Fatalf("exec migration 2: %v", err)
 	}
+	migration3Path := filepath.Join("..", "..", "..", "db", "migrations", "000003_prompt_soft_delete.up.sql")
+	migration3SQL, err := os.ReadFile(migration3Path)
+	if err != nil {
+		t.Fatalf("read migration 3: %v", err)
+	}
+	if _, err := db.Exec(string(migration3SQL)); err != nil {
+		t.Fatalf("exec migration 3: %v", err)
+	}
 
 	cleanup := func() {
 		_ = db.Close()
@@ -188,5 +196,22 @@ func TestPromptRepositories_Workflow(t *testing.T) {
 	}
 	if stats[0].TotalCalls != 1 || stats[0].SuccessCalls != 1 {
 		t.Fatalf("unexpected stats %+v", stats[0])
+	}
+
+	if err := repos.Prompts.Delete(ctx, promptID); err != nil {
+		t.Fatalf("soft delete prompt: %v", err)
+	}
+	if _, err := repos.Prompts.GetByID(ctx, promptID); err != domain.ErrNotFound {
+		t.Fatalf("expected ErrNotFound after delete got %v", err)
+	}
+	if err := repos.Prompts.Delete(ctx, promptID); err != domain.ErrNotFound {
+		t.Fatalf("expected ErrNotFound on second delete got %v", err)
+	}
+	listed, err := repos.Prompts.List(ctx, domain.PromptListOptions{Limit: 10})
+	if err != nil {
+		t.Fatalf("list prompts after delete: %v", err)
+	}
+	if len(listed) != 0 {
+		t.Fatalf("expected no prompts after delete got %d", len(listed))
 	}
 }

@@ -113,14 +113,14 @@
 - `GET /api/v1/prompts/{id}/versions`：查看 Prompt 版本列表。
 - `POST /api/v1/prompts/{id}/versions/{versionId}/activate`：切换当前启用版本。
 - `GET /api/v1/prompts/{id}/stats`：查看最近若干天（默认 7 天）的执行统计。
-- `DELETE /api/v1/prompts/{id}`：删除 Prompt 及其所有历史版本。操作完成后再次访问会返回 `404`。
+- `DELETE /api/v1/prompts/{id}`：软删除 Prompt（`status` 标记为 `deleted` 且记录 `deleted_at`），同时写入审计日志。操作完成后再次访问会返回 `404`。
 - 其余业务 API 将在后续里程碑逐步实现。
 
 ### 认证流程说明
 1. **注册**：管理员调用 `/api/v1/auth/register` 创建用户，密码以 bcrypt 哈希存储。
 2. **登录**：用户凭凭证调用 `/api/v1/auth/login`，获得 `access_token` 与 `refresh_token`。
 3. **访问受保护资源**：将 `Authorization: Bearer <access_token>` 加入请求头，`AuthGuard` 校验令牌并在上下文注入 `user_id`、`user_role`。
-4. **权限**：写操作（创建/更新/删除 Prompt、激活版本）需要 `admin` 或 `editor` 角色，查看操作允许任意登录用户。
+4. **权限**：写操作（创建/更新/删除 Prompt、激活版本）需要 `admin` 或 `editor` 角色，查看操作允许任意登录用户。删除操作会记录操作者信息至审计日志。
 5. **刷新令牌**：在访问令牌即将过期时，调用 `/api/v1/auth/refresh` 补发新的令牌。
 6. **统一错误格式**：所有认证相关接口返回 `code`、`message`、`details`，便于前端统一处理。
 
@@ -147,6 +147,11 @@
   - 零点归档：每日定时任务将 Redis Counter 落库，保证历史数据完整；异常时可回放日志表重建。
 - **监控与降级**
   - Prometheus 记录缓存命中率、锁等待、失败率；Redis 故障时回退到直连数据库并打告警。
+
+## 审计与软删除
+- **软删除语义**：`prompts` 表新增 `status`（默认 `active`）与 `deleted_at` 字段，通过更新状态实现软删除，后续可按需恢复或定期物理清理。
+- **审计日志**：`prompt_audit_logs` 表记录关键动作（当前实现覆盖删除），字段包含操作者、动作类型与可选上下文 `payload`，便于合规追踪。
+- **Service 行为**：后端删除逻辑会同时写入审计日志，若未来扩展更多操作，可沿用相同仓储接口快速落地。
 
 ## 配置与环境
 - `config/default.yaml`：基础配置（端口、日志级别、JWT secret 占位）。

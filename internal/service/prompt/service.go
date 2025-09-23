@@ -81,17 +81,19 @@ func (s *Service) CreatePrompt(ctx context.Context, input CreatePromptInput) (*d
 // ListPrompts 返回 Prompt 列表。
 // ListPromptsOptions 控制 Prompt 列表查询行为。
 type ListPromptsOptions struct {
-	Limit  int
-	Offset int
-	Search string
+	Limit          int
+	Offset         int
+	Search         string
+	IncludeDeleted bool
 }
 
 // ListPrompts 返回 Prompt 列表及总数。
 func (s *Service) ListPrompts(ctx context.Context, opts ListPromptsOptions) ([]*domain.Prompt, int64, error) {
 	repoOpts := domain.PromptListOptions{
-		Limit:  opts.Limit,
-		Offset: opts.Offset,
-		Search: strings.TrimSpace(opts.Search),
+		Limit:          opts.Limit,
+		Offset:         opts.Offset,
+		Search:         strings.TrimSpace(opts.Search),
+		IncludeDeleted: opts.IncludeDeleted,
 	}
 
 	prompts, err := s.repos.Prompts.List(ctx, repoOpts)
@@ -290,13 +292,33 @@ func (s *Service) GetExecutionStats(ctx context.Context, promptID string, days i
 	return stats, nil
 }
 
-// DeletePrompt 删除指定 Prompt。
-func (s *Service) DeletePrompt(ctx context.Context, promptID string) error {
+// DeletePrompt 删除指定 Prompt（软删除），并记录审计日志。
+func (s *Service) DeletePrompt(ctx context.Context, promptID, deletedBy string) error {
 	if err := s.repos.Prompts.Delete(ctx, promptID); err != nil {
 		if errors.Is(err, domain.ErrNotFound) {
 			return ErrPromptNotFound
 		}
 		return err
+	}
+
+	if s.repos.PromptAuditLog != nil {
+		actor := optionalString(deletedBy)
+		payload, err := json.Marshal(map[string]string{
+			"status": "deleted",
+		})
+		if err != nil {
+			return err
+		}
+		audit := &domain.PromptAuditLog{
+			ID:        uuid.NewString(),
+			PromptID:  promptID,
+			Action:    "prompt.deleted",
+			Payload:   payload,
+			CreatedBy: actor,
+		}
+		if err := s.repos.PromptAuditLog.Create(ctx, audit); err != nil {
+			return err
+		}
 	}
 	return nil
 }
