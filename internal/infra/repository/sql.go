@@ -210,6 +210,52 @@ WHERE p.id = %s AND p.deleted_at IS NULL`, ph.Next())
 	return prompt, nil
 }
 
+func (r *promptRepository) GetByIDIncludeDeleted(ctx context.Context, promptID string) (*domain.Prompt, error) {
+	ph := database.NewPlaceholderBuilder(r.dialect)
+	query := fmt.Sprintf(`SELECT p.id, p.name, p.description, p.tags, p.active_version_id, p.body, p.created_by, u.email, p.status, p.deleted_at, p.created_at, p.updated_at
+FROM prompts p
+LEFT JOIN users u ON p.created_by = u.id
+WHERE p.id = %s`, ph.Next())
+
+	var row promptRow
+	err := r.db.QueryRowContext(ctx, query, promptID).Scan(&row.id, &row.name, &row.description, &row.tags, &row.activeVersionID, &row.body, &row.createdBy, &row.createdByEmail, &row.status, &row.deletedAt, &row.createdAt, &row.updatedAt)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, domain.ErrNotFound
+		}
+		return nil, err
+	}
+
+	prompt := &domain.Prompt{
+		ID:        row.id,
+		Name:      row.name,
+		CreatedAt: row.createdAt,
+		UpdatedAt: row.updatedAt,
+		Status:    row.status,
+	}
+	if row.description.Valid {
+		prompt.Description = &row.description.String
+	}
+	if row.tags.Valid {
+		prompt.Tags = json.RawMessage(row.tags.String)
+	}
+	if row.activeVersionID.Valid {
+		prompt.ActiveVersionID = &row.activeVersionID.String
+	}
+	if row.body.Valid {
+		prompt.Body = &row.body.String
+	}
+	if row.createdByEmail.Valid {
+		prompt.CreatedBy = &row.createdByEmail.String
+	} else if row.createdBy.Valid {
+		prompt.CreatedBy = &row.createdBy.String
+	}
+	if row.deletedAt.Valid {
+		prompt.DeletedAt = &row.deletedAt.Time
+	}
+	return prompt, nil
+}
+
 func (r *promptRepository) GetByName(ctx context.Context, name string, includeDeleted bool) (*domain.Prompt, error) {
 	ph := database.NewPlaceholderBuilder(r.dialect)
 	query := fmt.Sprintf(`SELECT p.id, p.name, p.description, p.tags, p.active_version_id, p.body, p.created_by, u.email, p.status, p.deleted_at, p.created_at, p.updated_at
@@ -471,34 +517,53 @@ func (r *promptRepository) Delete(ctx context.Context, promptID string) error {
 
 func (r *promptRepository) Restore(ctx context.Context, promptID string, params domain.PromptRestoreParams) error {
 	ph := database.NewPlaceholderBuilder(r.dialect)
-	query := fmt.Sprintf(`UPDATE prompts
-SET description = %s,
-    tags = %s,
-    created_by = %s,
-    body = %s,
-    status = 'active',
-    deleted_at = NULL,
-    updated_at = CURRENT_TIMESTAMP
-WHERE id = %s`, ph.Next(), ph.Next(), ph.Next(), ph.Next(), ph.Next())
+	var sets []string
+	var args []interface{}
 
-	description := sql.NullString{}
-	if params.Description != nil {
-		description = sql.NullString{String: *params.Description, Valid: true}
-	}
-	tags := sql.NullString{}
-	if params.Tags != nil {
-		tags = sql.NullString{String: *params.Tags, Valid: true}
-	}
-	createdBy := sql.NullString{}
-	if params.CreatedBy != nil {
-		createdBy = sql.NullString{String: *params.CreatedBy, Valid: true}
-	}
-	body := sql.NullString{}
-	if params.Body != nil {
-		body = sql.NullString{String: *params.Body, Valid: true}
+	sets = append(sets, "status = 'active'")
+	sets = append(sets, "deleted_at = NULL")
+	sets = append(sets, "updated_at = CURRENT_TIMESTAMP")
+
+	if params.HasDescription {
+		description := sql.NullString{}
+		if params.Description != nil {
+			description = sql.NullString{String: *params.Description, Valid: true}
+		}
+		sets = append(sets, fmt.Sprintf("description = %s", ph.Next()))
+		args = append(args, description)
 	}
 
-	result, err := r.db.ExecContext(ctx, query, description, tags, createdBy, body, promptID)
+	if params.HasTags {
+		tags := sql.NullString{}
+		if params.Tags != nil {
+			tags = sql.NullString{String: *params.Tags, Valid: true}
+		}
+		sets = append(sets, fmt.Sprintf("tags = %s", ph.Next()))
+		args = append(args, tags)
+	}
+
+	if params.HasCreatedBy {
+		createdBy := sql.NullString{}
+		if params.CreatedBy != nil {
+			createdBy = sql.NullString{String: *params.CreatedBy, Valid: true}
+		}
+		sets = append(sets, fmt.Sprintf("created_by = %s", ph.Next()))
+		args = append(args, createdBy)
+	}
+
+	if params.HasBody {
+		body := sql.NullString{}
+		if params.Body != nil {
+			body = sql.NullString{String: *params.Body, Valid: true}
+		}
+		sets = append(sets, fmt.Sprintf("body = %s", ph.Next()))
+		args = append(args, body)
+	}
+
+	query := fmt.Sprintf("UPDATE prompts SET %s WHERE id = %s AND deleted_at IS NOT NULL", strings.Join(sets, ", "), ph.Next())
+	args = append(args, promptID)
+
+	result, err := r.db.ExecContext(ctx, query, args...)
 	if err != nil {
 		return err
 	}

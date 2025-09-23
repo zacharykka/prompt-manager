@@ -9,4 +9,5 @@ var (
 	ErrVersionNotFound     = errors.New("prompt version not found")
 	ErrPromptAlreadyExists = errors.New("prompt already exists")
 	ErrNoFieldsToUpdate    = errors.New("no prompt fields to update")
+	ErrPromptNotDeleted    = errors.New("prompt is not deleted")
 )

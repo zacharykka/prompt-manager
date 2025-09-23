@@ -311,6 +311,57 @@ func TestDeletePrompt(t *testing.T) {
 	}
 }
 
+func TestRestorePrompt(t *testing.T) {
+	svc, cleanup := setupPromptService(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	prompt, err := svc.CreatePrompt(ctx, CreatePromptInput{Name: "Restorable"})
+	if err != nil {
+		t.Fatalf("create prompt: %v", err)
+	}
+
+	if err := svc.DeletePrompt(ctx, prompt.ID, "deleter@example.com"); err != nil {
+		t.Fatalf("delete prompt: %v", err)
+	}
+
+	restored, err := svc.RestorePrompt(ctx, prompt.ID, "restorer@example.com")
+	if err != nil {
+		t.Fatalf("restore prompt: %v", err)
+	}
+	if restored.Status != "active" {
+		t.Fatalf("expected status active got %s", restored.Status)
+	}
+	if restored.DeletedAt != nil {
+		t.Fatalf("expected deleted_at cleared")
+	}
+
+	logs, err := svc.repos.PromptAuditLog.ListByPrompt(ctx, prompt.ID, 10)
+	if err != nil {
+		t.Fatalf("list audit logs: %v", err)
+	}
+	found := false
+	for _, log := range logs {
+		if log.Action == "prompt.restored" {
+			found = true
+			if log.CreatedBy == nil || *log.CreatedBy != "restorer@example.com" {
+				t.Fatalf("expected audit actor restorer@example.com got %v", log.CreatedBy)
+			}
+		}
+	}
+	if !found {
+		t.Fatalf("expected prompt.restored audit log entry")
+	}
+
+	if _, err := svc.RestorePrompt(ctx, prompt.ID, "restorer@example.com"); err != ErrPromptNotDeleted {
+		t.Fatalf("expected ErrPromptNotDeleted on restoring active prompt got %v", err)
+	}
+
+	if _, err := svc.RestorePrompt(ctx, uuid.NewString(), "restorer@example.com"); err != ErrPromptNotFound {
+		t.Fatalf("expected ErrPromptNotFound restoring unknown prompt got %v", err)
+	}
+}
+
 func TestCreatePromptAfterSoftDelete(t *testing.T) {
 	svc, cleanup := setupPromptService(t)
 	defer cleanup()

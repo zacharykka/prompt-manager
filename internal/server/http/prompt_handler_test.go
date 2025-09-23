@@ -127,6 +127,198 @@ func TestPromptHandler_CreateAndList(t *testing.T) {
 	}
 }
 
+func TestPromptHandler_ListIncludesDeleted(t *testing.T) {
+	handler, cleanup := setupPromptHandler(t)
+	defer cleanup()
+
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	router.Use(func(ctx *gin.Context) {
+		ctx.Set(middleware.UserContextKey, "tester-id")
+		ctx.Set(middleware.UserEmailContextKey, "tester@example.com")
+		ctx.Set(middleware.UserRoleContextKey, middleware.RoleAdmin)
+		ctx.Next()
+	})
+	handler.RegisterRoutes(router.Group("/prompts"))
+
+	createPayload := map[string]interface{}{"name": "Need recycle"}
+	createBody, _ := json.Marshal(createPayload)
+	createReq := httptest.NewRequest(http.MethodPost, "/prompts", bytes.NewReader(createBody))
+	createReq.Header.Set("Content-Type", "application/json")
+	createRec := httptest.NewRecorder()
+
+	router.ServeHTTP(createRec, createReq)
+
+	if createRec.Code != http.StatusOK {
+		t.Fatalf("create prompt expected 200 got %d body=%s", createRec.Code, createRec.Body.String())
+	}
+
+	var createResp struct {
+		Data struct {
+			Prompt struct {
+				ID     string `json:"id"`
+				Status string `json:"status"`
+			} `json:"prompt"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(createRec.Body.Bytes(), &createResp); err != nil {
+		t.Fatalf("unmarshal create response: %v", err)
+	}
+	if createResp.Data.Prompt.ID == "" {
+		t.Fatalf("expected prompt id in create response: %s", createRec.Body.String())
+	}
+
+	deleteReq := httptest.NewRequest(http.MethodDelete, "/prompts/"+createResp.Data.Prompt.ID, nil)
+	deleteRec := httptest.NewRecorder()
+
+	router.ServeHTTP(deleteRec, deleteReq)
+
+	if deleteRec.Code != http.StatusOK {
+		t.Fatalf("delete prompt expected 200 got %d body=%s", deleteRec.Code, deleteRec.Body.String())
+	}
+
+	type listResponse struct {
+		Data struct {
+			Items []struct {
+				ID     string `json:"id"`
+				Status string `json:"status"`
+			} `json:"items"`
+			Meta struct {
+				Total int `json:"total"`
+			} `json:"meta"`
+		} `json:"data"`
+	}
+
+	activeReq := httptest.NewRequest(http.MethodGet, "/prompts", nil)
+	activeRec := httptest.NewRecorder()
+	router.ServeHTTP(activeRec, activeReq)
+
+	if activeRec.Code != http.StatusOK {
+		t.Fatalf("list active expected 200 got %d body=%s", activeRec.Code, activeRec.Body.String())
+	}
+
+	var activeResp listResponse
+	if err := json.Unmarshal(activeRec.Body.Bytes(), &activeResp); err != nil {
+		t.Fatalf("unmarshal active list: %v", err)
+	}
+	if activeResp.Data.Meta.Total != 0 {
+		t.Fatalf("expected active total 0 got %d", activeResp.Data.Meta.Total)
+	}
+	if len(activeResp.Data.Items) != 0 {
+		t.Fatalf("expected no active items got %d", len(activeResp.Data.Items))
+	}
+
+	deletedReq := httptest.NewRequest(http.MethodGet, "/prompts?includeDeleted=true", nil)
+	deletedRec := httptest.NewRecorder()
+	router.ServeHTTP(deletedRec, deletedReq)
+
+	if deletedRec.Code != http.StatusOK {
+		t.Fatalf("list deleted expected 200 got %d body=%s", deletedRec.Code, deletedRec.Body.String())
+	}
+
+	var deletedResp listResponse
+	if err := json.Unmarshal(deletedRec.Body.Bytes(), &deletedResp); err != nil {
+		t.Fatalf("unmarshal deleted list: %v", err)
+	}
+	if deletedResp.Data.Meta.Total == 0 {
+		t.Fatalf("expected deleted total > 0 got %d", deletedResp.Data.Meta.Total)
+	}
+	if len(deletedResp.Data.Items) != 1 {
+		t.Fatalf("expected one deleted item got %d", len(deletedResp.Data.Items))
+	}
+	if deletedResp.Data.Items[0].Status != "deleted" {
+		t.Fatalf("expected item status deleted got %s", deletedResp.Data.Items[0].Status)
+	}
+}
+
+func TestPromptHandler_Restore(t *testing.T) {
+	handler, cleanup := setupPromptHandler(t)
+	defer cleanup()
+
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	router.Use(func(ctx *gin.Context) {
+		ctx.Set(middleware.UserContextKey, "tester-id")
+		ctx.Set(middleware.UserEmailContextKey, "tester@example.com")
+		ctx.Set(middleware.UserRoleContextKey, middleware.RoleAdmin)
+		ctx.Next()
+	})
+	handler.RegisterRoutes(router.Group("/prompts"))
+
+	createPayload := map[string]interface{}{"name": "Need restore"}
+	createBody, _ := json.Marshal(createPayload)
+	createReq := httptest.NewRequest(http.MethodPost, "/prompts", bytes.NewReader(createBody))
+	createReq.Header.Set("Content-Type", "application/json")
+	createRec := httptest.NewRecorder()
+
+	router.ServeHTTP(createRec, createReq)
+
+	if createRec.Code != http.StatusOK {
+		t.Fatalf("create prompt expected 200 got %d body=%s", createRec.Code, createRec.Body.String())
+	}
+
+	var createResp struct {
+		Data struct {
+			Prompt struct {
+				ID string `json:"id"`
+			} `json:"prompt"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(createRec.Body.Bytes(), &createResp); err != nil {
+		t.Fatalf("unmarshal create response: %v", err)
+	}
+
+	deleteReq := httptest.NewRequest(http.MethodDelete, "/prompts/"+createResp.Data.Prompt.ID, nil)
+	deleteRec := httptest.NewRecorder()
+	router.ServeHTTP(deleteRec, deleteReq)
+	if deleteRec.Code != http.StatusOK {
+		t.Fatalf("delete prompt expected 200 got %d body=%s", deleteRec.Code, deleteRec.Body.String())
+	}
+
+	restoreReq := httptest.NewRequest(http.MethodPost, "/prompts/"+createResp.Data.Prompt.ID+"/restore", nil)
+	restoreRec := httptest.NewRecorder()
+	router.ServeHTTP(restoreRec, restoreReq)
+
+	if restoreRec.Code != http.StatusOK {
+		t.Fatalf("restore prompt expected 200 got %d body=%s", restoreRec.Code, restoreRec.Body.String())
+	}
+
+	var restoreResp struct {
+		Data struct {
+			Prompt struct {
+				Status string `json:"status"`
+			} `json:"prompt"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(restoreRec.Body.Bytes(), &restoreResp); err != nil {
+		t.Fatalf("unmarshal restore response: %v", err)
+	}
+	if restoreResp.Data.Prompt.Status != "active" {
+		t.Fatalf("expected restored prompt status active got %s", restoreResp.Data.Prompt.Status)
+	}
+
+	listReq := httptest.NewRequest(http.MethodGet, "/prompts", nil)
+	listRec := httptest.NewRecorder()
+	router.ServeHTTP(listRec, listReq)
+	if listRec.Code != http.StatusOK {
+		t.Fatalf("list prompts expected 200 got %d body=%s", listRec.Code, listRec.Body.String())
+	}
+
+	var listResp struct {
+		Data struct {
+			Meta struct {
+				Total int `json:"total"`
+			} `json:"meta"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(listRec.Body.Bytes(), &listResp); err != nil {
+		t.Fatalf("unmarshal list response: %v", err)
+	}
+	if listResp.Data.Meta.Total != 1 {
+		t.Fatalf("expected total 1 got %d", listResp.Data.Meta.Total)
+	}
+}
+
 func TestPromptHandler_CreateVersion(t *testing.T) {
 	handler, cleanup := setupPromptHandler(t)
 	defer cleanup()

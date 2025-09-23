@@ -35,6 +35,7 @@ func (h *PromptHandler) RegisterRoutes(rg *gin.RouterGroup) {
 	rg.POST("/:id/versions/:versionId/activate", h.SetActiveVersion)
 	rg.GET("/:id/stats", h.GetPromptStats)
 	rg.DELETE("/:id", h.DeletePrompt)
+	rg.POST("/:id/restore", h.RestorePrompt)
 }
 
 type createPromptRequest struct {
@@ -136,10 +137,18 @@ func (h *PromptHandler) ListPrompts(ctx *gin.Context) {
 	limit, offset := parsePagination(ctx.Query("limit"), ctx.Query("offset"))
 	search := strings.TrimSpace(ctx.Query("search"))
 
+	includeDeleted := false
+	if value := strings.TrimSpace(ctx.Query("includeDeleted")); value != "" {
+		if parsed, err := strconv.ParseBool(value); err == nil {
+			includeDeleted = parsed
+		}
+	}
+
 	prompts, total, err := h.service.ListPrompts(ctx, promptsvc.ListPromptsOptions{
-		Limit:  limit,
-		Offset: offset,
-		Search: search,
+		Limit:          limit,
+		Offset:         offset,
+		Search:         search,
+		IncludeDeleted: includeDeleted,
 	})
 	if err != nil {
 		httpx.RespondError(ctx, http.StatusInternalServerError, "LIST_FAILED", err.Error(), nil)
@@ -251,12 +260,30 @@ func (h *PromptHandler) DeletePrompt(ctx *gin.Context) {
 	httpx.RespondOK(ctx, gin.H{"prompt_id": ctx.Param("id")})
 }
 
+// RestorePrompt 恢复软删除的 Prompt。
+func (h *PromptHandler) RestorePrompt(ctx *gin.Context) {
+	restoredBy := ctx.GetString(middleware.UserEmailContextKey)
+	if restoredBy == "" {
+		restoredBy = ctx.GetString(middleware.UserContextKey)
+	}
+
+	restored, err := h.service.RestorePrompt(ctx, ctx.Param("id"), restoredBy)
+	if err != nil {
+		h.handleError(ctx, err)
+		return
+	}
+
+	httpx.RespondOK(ctx, gin.H{"prompt": restored})
+}
+
 func (h *PromptHandler) handleError(ctx *gin.Context, err error) {
 	switch err {
 	case promptsvc.ErrNameRequired, promptsvc.ErrBodyRequired:
 		httpx.RespondError(ctx, http.StatusBadRequest, "INVALID_INPUT", err.Error(), nil)
 	case promptsvc.ErrPromptAlreadyExists:
 		httpx.RespondError(ctx, http.StatusConflict, "PROMPT_EXISTS", err.Error(), nil)
+	case promptsvc.ErrPromptNotDeleted:
+		httpx.RespondError(ctx, http.StatusBadRequest, "PROMPT_NOT_DELETED", err.Error(), nil)
 	case promptsvc.ErrPromptNotFound:
 		httpx.RespondError(ctx, http.StatusNotFound, "PROMPT_NOT_FOUND", err.Error(), nil)
 	case promptsvc.ErrVersionNotFound:

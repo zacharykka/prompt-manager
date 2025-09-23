@@ -16,6 +16,7 @@ type UserRepository interface {
 type PromptRepository interface {
 	Create(ctx context.Context, prompt *Prompt) error
 	GetByID(ctx context.Context, promptID string) (*Prompt, error)
+	GetByIDIncludeDeleted(ctx context.Context, promptID string) (*Prompt, error)
 	GetByName(ctx context.Context, name string, includeDeleted bool) (*Prompt, error)
 	List(ctx context.Context, opts PromptListOptions) ([]*Prompt, error)
 	Count(ctx context.Context, opts PromptListOptions) (int64, error)
@@ -75,8 +76,12 @@ type PromptUpdateParams struct {
 
 // PromptRestoreParams 描述 Prompt 恢复时需要更新的字段。
 type PromptRestoreParams struct {
-	Description *string
-	Tags        *string
-	CreatedBy   *string
-	Body        *string
+	Description    *string
+	Tags           *string
+	CreatedBy      *string
+	Body           *string
+	HasDescription bool
+	HasTags        bool
+	HasCreatedBy   bool
+	HasBody        bool
 }

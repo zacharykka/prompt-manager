@@ -65,8 +65,12 @@ func (s *Service) CreatePrompt(ctx context.Context, input CreatePromptInput) (*d
 
 	if existing != nil && existing.Status == "deleted" {
 		restoreParams := domain.PromptRestoreParams{
-			Description: description,
-			CreatedBy:   createdBy,
+			Description:    description,
+			CreatedBy:      createdBy,
+			HasDescription: true,
+			HasCreatedBy:   true,
+			HasBody:        true,
+			HasTags:        true,
 		}
 		if len(tagsJSON) > 0 {
 			tagsStr := string(tagsJSON)
@@ -347,6 +351,57 @@ func (s *Service) GetExecutionStats(ctx context.Context, promptID string, days i
 		return nil, err
 	}
 	return stats, nil
+}
+
+// RestorePrompt 将软删除的 Prompt 恢复为可用状态，并记录审计日志。
+func (s *Service) RestorePrompt(ctx context.Context, promptID, restoredBy string) (*domain.Prompt, error) {
+	deleted, err := s.repos.Prompts.GetByIDIncludeDeleted(ctx, promptID)
+	if err != nil {
+		if errors.Is(err, domain.ErrNotFound) {
+			return nil, ErrPromptNotFound
+		}
+		return nil, err
+	}
+	if deleted.DeletedAt == nil {
+		return nil, ErrPromptNotDeleted
+	}
+
+	if err := s.repos.Prompts.Restore(ctx, promptID, domain.PromptRestoreParams{}); err != nil {
+		if errors.Is(err, domain.ErrNotFound) {
+			return nil, ErrPromptNotFound
+		}
+		return nil, err
+	}
+
+	restored, err := s.repos.Prompts.GetByID(ctx, promptID)
+	if err != nil {
+		if errors.Is(err, domain.ErrNotFound) {
+			return nil, ErrPromptNotFound
+		}
+		return nil, err
+	}
+
+	if s.repos.PromptAuditLog != nil {
+		actor := optionalString(restoredBy)
+		payload, err := json.Marshal(map[string]string{
+			"status": "restored",
+		})
+		if err != nil {
+			return nil, err
+		}
+		log := &domain.PromptAuditLog{
+			ID:        uuid.NewString(),
+			PromptID:  promptID,
+			Action:    "prompt.restored",
+			Payload:   payload,
+			CreatedBy: actor,
+		}
+		if err := s.repos.PromptAuditLog.Create(ctx, log); err != nil {
+			return nil, err
+		}
+	}
+
+	return restored, nil
 }
 
 // DeletePrompt 删除指定 Prompt（软删除），并记录审计日志。
