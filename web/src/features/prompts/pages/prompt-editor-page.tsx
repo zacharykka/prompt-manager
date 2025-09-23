@@ -4,6 +4,7 @@ import { z } from 'zod'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import type { AxiosError } from 'axios'
+import { useQueryClient } from '@tanstack/react-query'
 
 import { Alert } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
@@ -44,6 +45,7 @@ export function PromptEditorPage() {
   const navigate = useNavigate()
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [originalPrompt, setOriginalPrompt] = useState<Prompt | null>(null)
+  const queryClient = useQueryClient()
 
   const {
     data: prompt,
@@ -97,6 +99,7 @@ export function PromptEditorPage() {
     try {
       if (mode === 'create') {
         await createPrompt(payload)
+        await queryClient.invalidateQueries({ queryKey: ['prompts'] })
         navigate('/prompts', {
           state: { feedback: { type: 'success', message: `Prompt “${payload.name}” 创建成功。` } },
         })
@@ -122,6 +125,8 @@ export function PromptEditorPage() {
         })
       }
 
+      await queryClient.invalidateQueries({ queryKey: ['prompts'] })
+      await queryClient.invalidateQueries({ queryKey: ['prompt', promptId] })
       navigate('/prompts', {
         state: { feedback: { type: 'success', message: `Prompt “${payload.name}” 已更新。` } },
       })
