@@ -319,6 +319,92 @@ func TestPromptHandler_Restore(t *testing.T) {
 	}
 }
 
+func TestPromptHandler_DiffVersion(t *testing.T) {
+	handler, cleanup := setupPromptHandler(t)
+	defer cleanup()
+
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	router.Use(func(ctx *gin.Context) {
+		ctx.Set(middleware.UserContextKey, "tester-id")
+		ctx.Set(middleware.UserEmailContextKey, "tester@example.com")
+		ctx.Set(middleware.UserRoleContextKey, middleware.RoleAdmin)
+		ctx.Next()
+	})
+	handler.RegisterRoutes(router.Group("/prompts"))
+
+	createPayload := map[string]interface{}{
+		"name": "Version Diff",
+		"body": "Hello, world!",
+	}
+	createBody, _ := json.Marshal(createPayload)
+	createReq := httptest.NewRequest(http.MethodPost, "/prompts", bytes.NewReader(createBody))
+	createReq.Header.Set("Content-Type", "application/json")
+	createRec := httptest.NewRecorder()
+	router.ServeHTTP(createRec, createReq)
+	if createRec.Code != http.StatusOK {
+		t.Fatalf("create prompt expected 200 got %d body=%s", createRec.Code, createRec.Body.String())
+	}
+
+	var createResp struct {
+		Data struct {
+			Prompt struct {
+				ID string `json:"id"`
+			} `json:"prompt"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(createRec.Body.Bytes(), &createResp); err != nil {
+		t.Fatalf("unmarshal create response: %v", err)
+	}
+
+	versionPayload := map[string]interface{}{
+		"body": "Hello, universe!",
+	}
+	versionBody, _ := json.Marshal(versionPayload)
+	versionReq := httptest.NewRequest(http.MethodPost, "/prompts/"+createResp.Data.Prompt.ID+"/versions", bytes.NewReader(versionBody))
+	versionReq.Header.Set("Content-Type", "application/json")
+	versionRec := httptest.NewRecorder()
+	router.ServeHTTP(versionRec, versionReq)
+	if versionRec.Code != http.StatusOK {
+		t.Fatalf("create version expected 200 got %d body=%s", versionRec.Code, versionRec.Body.String())
+	}
+
+	var versionResp struct {
+		Data struct {
+			Version struct {
+				ID string `json:"id"`
+			} `json:"version"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(versionRec.Body.Bytes(), &versionResp); err != nil {
+		t.Fatalf("unmarshal version response: %v", err)
+	}
+
+	diffReq := httptest.NewRequest(http.MethodGet, "/prompts/"+createResp.Data.Prompt.ID+"/versions/"+versionResp.Data.Version.ID+"/diff?compareTo=active", nil)
+	diffRec := httptest.NewRecorder()
+	router.ServeHTTP(diffRec, diffReq)
+	if diffRec.Code != http.StatusOK {
+		t.Fatalf("diff request expected 200 got %d body=%s", diffRec.Code, diffRec.Body.String())
+	}
+
+	var diffResp struct {
+		Data struct {
+			Diff struct {
+				Body []struct {
+					Type string `json:"type"`
+					Text string `json:"text"`
+				} `json:"body"`
+			} `json:"diff"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(diffRec.Body.Bytes(), &diffResp); err != nil {
+		t.Fatalf("unmarshal diff response: %v", err)
+	}
+	if len(diffResp.Data.Diff.Body) == 0 {
+		t.Fatalf("expected diff body segments")
+	}
+}
+
 func TestPromptHandler_CreateVersion(t *testing.T) {
 	handler, cleanup := setupPromptHandler(t)
 	defer cleanup()

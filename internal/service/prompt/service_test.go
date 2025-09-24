@@ -394,6 +394,62 @@ func TestRestorePrompt_LegacyDeletedWithoutTimestamp(t *testing.T) {
 	}
 }
 
+func TestDiffPromptVersion(t *testing.T) {
+	svc, cleanup := setupPromptService(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	prompt, err := svc.CreatePrompt(ctx, CreatePromptInput{Name: "DiffPrompt"})
+	if err != nil {
+		t.Fatalf("create prompt: %v", err)
+	}
+
+	first, err := svc.CreatePromptVersion(ctx, CreatePromptVersionInput{
+		PromptID:  prompt.ID,
+		Body:      "Hello World",
+		Activate:  true,
+		CreatedBy: "author@example.com",
+	})
+	if err != nil {
+		t.Fatalf("create first version: %v", err)
+	}
+
+	second, err := svc.CreatePromptVersion(ctx, CreatePromptVersionInput{
+		PromptID:  prompt.ID,
+		Body:      "Hello Universe",
+		CreatedBy: "author@example.com",
+	})
+	if err != nil {
+		t.Fatalf("create second version: %v", err)
+	}
+
+	diff, err := svc.DiffPromptVersion(ctx, prompt.ID, second.ID, DiffPromptVersionOptions{CompareToActive: true})
+	if err != nil {
+		t.Fatalf("diff with active: %v", err)
+	}
+	if diff.Base.ID != second.ID {
+		t.Fatalf("expected base version %s got %s", second.ID, diff.Base.ID)
+	}
+	if diff.Target.ID != first.ID {
+		t.Fatalf("expected target version %s got %s", first.ID, diff.Target.ID)
+	}
+	if len(diff.Body) == 0 {
+		t.Fatalf("expected body diff segments")
+	}
+
+	prevDiff, err := svc.DiffPromptVersion(ctx, prompt.ID, second.ID, DiffPromptVersionOptions{})
+	if err != nil {
+		t.Fatalf("diff with previous: %v", err)
+	}
+	if prevDiff.Target.ID != first.ID {
+		t.Fatalf("expected previous version target %s got %s", first.ID, prevDiff.Target.ID)
+	}
+
+	if _, err := svc.DiffPromptVersion(ctx, prompt.ID, first.ID, DiffPromptVersionOptions{CompareToPrevious: true}); err != ErrVersionNotFound {
+		t.Fatalf("expected ErrVersionNotFound when no previous version, got %v", err)
+	}
+}
+
 func TestCreatePromptAfterSoftDelete(t *testing.T) {
 	svc, cleanup := setupPromptService(t)
 	defer cleanup()

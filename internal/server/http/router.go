@@ -91,6 +91,7 @@ func NewEngine(cfg *config.Config, logger *zap.Logger, opts RouterOptions) *gin.
 		promptGroup.GET("/", opts.PromptHandler.ListPrompts)
 		promptGroup.GET("/:id", opts.PromptHandler.GetPrompt)
 		promptGroup.GET("/:id/versions", opts.PromptHandler.ListPromptVersions)
+		promptGroup.GET("/:id/versions/:versionId/diff", opts.PromptHandler.DiffPromptVersion)
 		promptGroup.GET("/:id/stats", opts.PromptHandler.GetPromptStats)
 
 		writeGroup := promptGroup.Group("")

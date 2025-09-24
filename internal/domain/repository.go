@@ -32,6 +32,7 @@ type PromptVersionRepository interface {
 	GetByID(ctx context.Context, versionID string) (*PromptVersion, error)
 	ListByPrompt(ctx context.Context, promptID string, limit, offset int) ([]*PromptVersion, error)
 	GetLatestVersionNumber(ctx context.Context, promptID string) (int, error)
+	GetPreviousVersion(ctx context.Context, promptID string, versionNumber int) (*PromptVersion, error)
 }
 
 // PromptExecutionLogRepository 定义 Prompt 执行日志接口。

@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -717,6 +718,43 @@ func (r *promptVersionRepository) GetLatestVersionNumber(ctx context.Context, pr
 		return int(latest.Int64), nil
 	}
 	return 0, nil
+}
+
+func (r *promptVersionRepository) GetPreviousVersion(ctx context.Context, promptID string, versionNumber int) (*domain.PromptVersion, error) {
+	ph := database.NewPlaceholderBuilder(r.dialect)
+	query := fmt.Sprintf(`SELECT id, prompt_id, version_number, body, variables_schema, status, metadata, created_by, created_at
+FROM prompt_versions
+WHERE prompt_id = %s AND version_number < %s
+ORDER BY version_number DESC LIMIT 1`, ph.Next(), ph.Next())
+
+	row := promptVersionRow{}
+	err := r.db.QueryRowContext(ctx, query, promptID, versionNumber).Scan(&row.id, &row.promptID, &row.versionNumber, &row.body, &row.variablesSchema, &row.status, &row.metadata, &row.createdBy, &row.createdAt)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, domain.ErrNotFound
+		}
+		return nil, err
+	}
+
+	version := &domain.PromptVersion{
+		ID:            row.id,
+		PromptID:      row.promptID,
+		VersionNumber: row.versionNumber,
+		Body:          row.body,
+		Status:        row.status,
+		CreatedAt:     row.createdAt,
+	}
+	if row.variablesSchema.Valid {
+		version.VariablesSchema = json.RawMessage(row.variablesSchema.String)
+	}
+	if row.metadata.Valid {
+		version.Metadata = json.RawMessage(row.metadata.String)
+	}
+	if row.createdBy.Valid {
+		version.CreatedBy = &row.createdBy.String
+	}
+
+	return version, nil
 }
 
 // ---- 执行日志仓储 ----

@@ -32,6 +32,7 @@ func (h *PromptHandler) RegisterRoutes(rg *gin.RouterGroup) {
 	rg.PATCH("/:id", h.UpdatePrompt)
 	rg.POST("/:id/versions", h.CreatePromptVersion)
 	rg.GET("/:id/versions", h.ListPromptVersions)
+	rg.GET("/:id/versions/:versionId/diff", h.DiffPromptVersion)
 	rg.POST("/:id/versions/:versionId/activate", h.SetActiveVersion)
 	rg.GET("/:id/stats", h.GetPromptStats)
 	rg.DELETE("/:id", h.DeletePrompt)
@@ -218,6 +219,29 @@ func (h *PromptHandler) ListPromptVersions(ctx *gin.Context) {
 	}
 
 	httpx.RespondOK(ctx, gin.H{"items": versions})
+}
+
+// DiffPromptVersion 对比指定 Prompt 版本与目标版本差异。
+func (h *PromptHandler) DiffPromptVersion(ctx *gin.Context) {
+	compareTo := strings.TrimSpace(strings.ToLower(ctx.Query("compareTo")))
+	targetID := strings.TrimSpace(ctx.Query("targetVersionId"))
+
+	options := promptsvc.DiffPromptVersionOptions{}
+	if targetID != "" {
+		options.TargetVersionID = &targetID
+	} else if compareTo == "active" {
+		options.CompareToActive = true
+	} else {
+		options.CompareToPrevious = true
+	}
+
+	diff, err := h.service.DiffPromptVersion(ctx, ctx.Param("id"), ctx.Param("versionId"), options)
+	if err != nil {
+		h.handleError(ctx, err)
+		return
+	}
+
+	httpx.RespondOK(ctx, gin.H{"diff": diff})
 }
 
 // SetActiveVersion 设定当前使用的版本。
