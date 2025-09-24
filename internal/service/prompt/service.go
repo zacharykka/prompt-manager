@@ -294,8 +294,30 @@ func (s *Service) CreatePromptVersion(ctx context.Context, input CreatePromptVer
 	}
 
 	if input.Activate {
-		body := created.Body
-		if err := s.repos.Prompts.UpdateActiveVersion(ctx, prompt.ID, &created.ID, &body); err != nil {
+		if err := s.SetActiveVersion(ctx, prompt.ID, created.ID, input.CreatedBy); err != nil {
+			return nil, err
+		}
+	}
+
+	if s.repos.PromptAuditLog != nil {
+		payload, err := json.Marshal(map[string]interface{}{
+			"version_id":       created.ID,
+			"version_number":   created.VersionNumber,
+			"status":           created.Status,
+			"activated_inline": input.Activate,
+		})
+		if err != nil {
+			return nil, err
+		}
+		actor := optionalString(input.CreatedBy)
+		audit := &domain.PromptAuditLog{
+			ID:        uuid.NewString(),
+			PromptID:  prompt.ID,
+			Action:    "prompt.version.created",
+			Payload:   payload,
+			CreatedBy: actor,
+		}
+		if err := s.repos.PromptAuditLog.Create(ctx, audit); err != nil {
 			return nil, err
 		}
 	}
@@ -317,8 +339,8 @@ func (s *Service) ListPromptVersions(ctx context.Context, promptID string, limit
 }
 
 // SetActiveVersion 将指定版本设为当前启用版本。
-func (s *Service) SetActiveVersion(ctx context.Context, promptID, versionID string) error {
-	_, err := s.GetPrompt(ctx, promptID)
+func (s *Service) SetActiveVersion(ctx context.Context, promptID, versionID, activatedBy string) error {
+	prompt, err := s.GetPrompt(ctx, promptID)
 	if err != nil {
 		return err
 	}
@@ -332,7 +354,36 @@ func (s *Service) SetActiveVersion(ctx context.Context, promptID, versionID stri
 	}
 
 	body := version.Body
-	return s.repos.Prompts.UpdateActiveVersion(ctx, promptID, &versionID, &body)
+	if err := s.repos.Prompts.UpdateActiveVersion(ctx, promptID, &versionID, &body); err != nil {
+		return err
+	}
+
+	if s.repos.PromptAuditLog != nil {
+		payloadData := map[string]interface{}{
+			"version_id":     version.ID,
+			"version_number": version.VersionNumber,
+		}
+		if prompt.ActiveVersionID != nil {
+			payloadData["previous_version_id"] = *prompt.ActiveVersionID
+		}
+		payload, err := json.Marshal(payloadData)
+		if err != nil {
+			return err
+		}
+		actor := optionalString(activatedBy)
+		audit := &domain.PromptAuditLog{
+			ID:        uuid.NewString(),
+			PromptID:  promptID,
+			Action:    "prompt.version.activated",
+			Payload:   payload,
+			CreatedBy: actor,
+		}
+		if err := s.repos.PromptAuditLog.Create(ctx, audit); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 // GetExecutionStats 返回最近若干天的执行统计。

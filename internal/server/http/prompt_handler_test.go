@@ -164,6 +164,20 @@ func TestPromptHandler_ListIncludesDeleted(t *testing.T) {
 	if err := json.Unmarshal(createRec.Body.Bytes(), &createResp); err != nil {
 		t.Fatalf("unmarshal create response: %v", err)
 	}
+
+	firstVersionPayload := map[string]interface{}{
+		"body":             "Hello, world!",
+		"variables_schema": map[string]interface{}{"foo": "bar"},
+		"activate":         true,
+	}
+	firstBody, _ := json.Marshal(firstVersionPayload)
+	firstReq := httptest.NewRequest(http.MethodPost, "/prompts/"+createResp.Data.Prompt.ID+"/versions", bytes.NewReader(firstBody))
+	firstReq.Header.Set("Content-Type", "application/json")
+	firstRec := httptest.NewRecorder()
+	router.ServeHTTP(firstRec, firstReq)
+	if firstRec.Code != http.StatusOK {
+		t.Fatalf("create first active version expected 200 got %d body=%s", firstRec.Code, firstRec.Body.String())
+	}
 	if createResp.Data.Prompt.ID == "" {
 		t.Fatalf("expected prompt id in create response: %s", createRec.Body.String())
 	}
@@ -358,7 +372,8 @@ func TestPromptHandler_DiffVersion(t *testing.T) {
 	}
 
 	versionPayload := map[string]interface{}{
-		"body": "Hello, universe!",
+		"body":             "Hello, universe!",
+		"variables_schema": map[string]interface{}{"foo": "baz", "new": 1},
 	}
 	versionBody, _ := json.Marshal(versionPayload)
 	versionReq := httptest.NewRequest(http.MethodPost, "/prompts/"+createResp.Data.Prompt.ID+"/versions", bytes.NewReader(versionBody))
@@ -394,6 +409,14 @@ func TestPromptHandler_DiffVersion(t *testing.T) {
 					Type string `json:"type"`
 					Text string `json:"text"`
 				} `json:"body"`
+				Variables *struct {
+					Changes []struct {
+						Key   string `json:"key"`
+						Type  string `json:"type"`
+						Left  string `json:"left"`
+						Right string `json:"right"`
+					} `json:"changes"`
+				} `json:"variablesSchema"`
 			} `json:"diff"`
 		} `json:"data"`
 	}
@@ -402,6 +425,9 @@ func TestPromptHandler_DiffVersion(t *testing.T) {
 	}
 	if len(diffResp.Data.Diff.Body) == 0 {
 		t.Fatalf("expected diff body segments")
+	}
+	if diffResp.Data.Diff.Variables == nil || len(diffResp.Data.Diff.Variables.Changes) == 0 {
+		t.Fatalf("expected variables diff changes")
 	}
 }
 

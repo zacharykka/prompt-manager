@@ -1,11 +1,11 @@
 package prompt
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
-	"strings"
+	"fmt"
+	"sort"
 	"time"
 
 	"github.com/sergi/go-diff/diffmatchpatch"
@@ -23,10 +23,15 @@ type DiffSegment struct {
 	Text string `json:"text"`
 }
 
+type JSONFieldChange struct {
+	Key   string `json:"key"`
+	Type  string `json:"type"`
+	Left  string `json:"left,omitempty"`
+	Right string `json:"right,omitempty"`
+}
+
 type FieldDiff struct {
-	Left    string `json:"left"`
-	Right   string `json:"right"`
-	Changed bool   `json:"changed"`
+	Changes []JSONFieldChange `json:"changes"`
 }
 
 type VersionSummary struct {
@@ -157,23 +162,86 @@ func buildBodyDiff(left, right string) []DiffSegment {
 }
 
 func buildFieldDiff(leftRaw, rightRaw json.RawMessage) *FieldDiff {
-	left := normalizeJSON(leftRaw)
-	right := normalizeJSON(rightRaw)
-	if left == right {
+	leftMap := map[string]interface{}{}
+	if len(leftRaw) > 0 {
+		_ = json.Unmarshal(leftRaw, &leftMap)
+	}
+	rightMap := map[string]interface{}{}
+	if len(rightRaw) > 0 {
+		_ = json.Unmarshal(rightRaw, &rightMap)
+	}
+
+	keys := make(map[string]struct{})
+	for key := range leftMap {
+		keys[key] = struct{}{}
+	}
+	for key := range rightMap {
+		keys[key] = struct{}{}
+	}
+
+	if len(keys) == 0 {
 		return nil
 	}
-	return &FieldDiff{Left: left, Right: right, Changed: true}
+
+	changes := make([]JSONFieldChange, 0)
+	for key := range keys {
+		leftVal, leftOK := leftMap[key]
+		rightVal, rightOK := rightMap[key]
+		switch {
+		case !leftOK && rightOK:
+			changes = append(changes, JSONFieldChange{
+				Key:   key,
+				Type:  "added",
+				Right: stringifyJSONValue(rightVal),
+			})
+		case leftOK && !rightOK:
+			changes = append(changes, JSONFieldChange{
+				Key:  key,
+				Type: "removed",
+				Left: stringifyJSONValue(leftVal),
+			})
+		default:
+			leftString := stringifyJSONValue(leftVal)
+			rightString := stringifyJSONValue(rightVal)
+			if leftString == rightString {
+				continue
+			}
+			changes = append(changes, JSONFieldChange{
+				Key:   key,
+				Type:  "modified",
+				Left:  leftString,
+				Right: rightString,
+			})
+		}
+	}
+
+	if len(changes) == 0 {
+		return nil
+	}
+
+	sort.Slice(changes, func(i, j int) bool {
+		return changes[i].Key < changes[j].Key
+	})
+
+	return &FieldDiff{Changes: changes}
 }
 
-func normalizeJSON(raw json.RawMessage) string {
-	if len(raw) == 0 {
+func stringifyJSONValue(value interface{}) string {
+	if value == nil {
 		return ""
 	}
-	var buf bytes.Buffer
-	if err := json.Compact(&buf, raw); err != nil {
-		return strings.TrimSpace(string(raw))
+	switch v := value.(type) {
+	case string:
+		return v
+	case float64, bool, int, int64, json.Number:
+		return fmt.Sprintf("%v", v)
+	default:
+		bytes, err := json.Marshal(v)
+		if err != nil {
+			return fmt.Sprintf("%v", v)
+		}
+		return string(bytes)
 	}
-	return buf.String()
 }
 
 func summarizeVersion(version *domain.PromptVersion) VersionSummary {

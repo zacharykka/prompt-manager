@@ -248,8 +248,12 @@ func (h *PromptHandler) DiffPromptVersion(ctx *gin.Context) {
 func (h *PromptHandler) SetActiveVersion(ctx *gin.Context) {
 	promptID := ctx.Param("id")
 	versionID := ctx.Param("versionId")
+	activatedBy := ctx.GetString(middleware.UserEmailContextKey)
+	if activatedBy == "" {
+		activatedBy = ctx.GetString(middleware.UserContextKey)
+	}
 
-	if err := h.service.SetActiveVersion(ctx, promptID, versionID); err != nil {
+	if err := h.service.SetActiveVersion(ctx, promptID, versionID, activatedBy); err != nil {
 		h.handleError(ctx, err)
 		return
 	}

@@ -175,12 +175,13 @@
    - Prompt CRUD、版本管理、变量 Schema 校验、渲染接口（含缓存）。
    - 执行日志写入与统计聚合表、基础统计 API + Redis 缓存。
    - RBAC 权限校验、审计日志、API Key 管理。
-   - 🔜 **Prompt 版本控制增强**：
-     - 新增版本 Diff 接口（支持与上一版本/当前版本比较），返回结构化差异数据。
-     - 扩展审计日志：记录 `prompt.version.created`、`prompt.version.activated` 等关键动作。
-     - 服务层补齐 `ListVersions/GetVersion`、`ActivateVersion` 的并发校验与错误处理。
-     - 设计统一的版本恢复 API，确保回滚后缓存与审计保持一致。
-     - 为上述能力补充单元/集成测试，覆盖旧数据兼容与回滚场景。
+   - ✅ **Prompt 版本控制增强（阶段一）**：
+     - 已提供 Diff 接口（支持上一版本/当前激活版本比对），产出结构化差异结果。
+     - 已扩展审计日志：记录 `prompt.version.created`、`prompt.version.activated` 等关键动作。
+     - ✅ 服务层补齐相关测试（包括旧数据兼容、审计日志落库）。
+   - 🔜 **Prompt 版本控制增强（阶段二）**：
+     - 优化版本恢复/并发校验、缓存刷新策略。
+     - 根据前端反馈进一步扩展接口（例如版本评论、审批流）。
 3. **Milestone 3：稳定性与观测**
    - 缓存一致性策略实现（锁、抖动、空值缓存），指标上报与报警。
    - Docker Compose 本地环境、集成测试套件、性能基准测试。

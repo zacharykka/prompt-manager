@@ -405,19 +405,23 @@ func TestDiffPromptVersion(t *testing.T) {
 	}
 
 	first, err := svc.CreatePromptVersion(ctx, CreatePromptVersionInput{
-		PromptID:  prompt.ID,
-		Body:      "Hello World",
-		Activate:  true,
-		CreatedBy: "author@example.com",
+		PromptID:        prompt.ID,
+		Body:            "Hello World",
+		VariablesSchema: map[string]interface{}{"foo": "bar"},
+		Metadata:        map[string]interface{}{"kind": "welcome"},
+		Activate:        true,
+		CreatedBy:       "author@example.com",
 	})
 	if err != nil {
 		t.Fatalf("create first version: %v", err)
 	}
 
 	second, err := svc.CreatePromptVersion(ctx, CreatePromptVersionInput{
-		PromptID:  prompt.ID,
-		Body:      "Hello Universe",
-		CreatedBy: "author@example.com",
+		PromptID:        prompt.ID,
+		Body:            "Hello Universe",
+		VariablesSchema: map[string]interface{}{"foo": "baz", "new": 1},
+		Metadata:        map[string]interface{}{"kind": "welcome", "channel": "email"},
+		CreatedBy:       "author@example.com",
 	})
 	if err != nil {
 		t.Fatalf("create second version: %v", err)
@@ -436,6 +440,12 @@ func TestDiffPromptVersion(t *testing.T) {
 	if len(diff.Body) == 0 {
 		t.Fatalf("expected body diff segments")
 	}
+	if diff.Variables == nil || len(diff.Variables.Changes) != 2 {
+		t.Fatalf("expected variables diff changes got %+v", diff.Variables)
+	}
+	if diff.Metadata == nil || len(diff.Metadata.Changes) != 1 {
+		t.Fatalf("expected metadata diff changes got %+v", diff.Metadata)
+	}
 
 	prevDiff, err := svc.DiffPromptVersion(ctx, prompt.ID, second.ID, DiffPromptVersionOptions{})
 	if err != nil {
@@ -447,6 +457,114 @@ func TestDiffPromptVersion(t *testing.T) {
 
 	if _, err := svc.DiffPromptVersion(ctx, prompt.ID, first.ID, DiffPromptVersionOptions{CompareToPrevious: true}); err != ErrVersionNotFound {
 		t.Fatalf("expected ErrVersionNotFound when no previous version, got %v", err)
+	}
+}
+
+func TestCreatePromptVersionAuditLog(t *testing.T) {
+	svc, cleanup := setupPromptService(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	prompt, err := svc.CreatePrompt(ctx, CreatePromptInput{Name: "AuditVersion"})
+	if err != nil {
+		t.Fatalf("create prompt: %v", err)
+	}
+
+	version, err := svc.CreatePromptVersion(ctx, CreatePromptVersionInput{
+		PromptID:  prompt.ID,
+		Body:      "Draft body",
+		CreatedBy: "creator@example.com",
+	})
+	if err != nil {
+		t.Fatalf("create version: %v", err)
+	}
+	if version == nil {
+		t.Fatalf("expected created version")
+	}
+
+	logs, err := svc.repos.PromptAuditLog.ListByPrompt(ctx, prompt.ID, 10)
+	if err != nil {
+		t.Fatalf("list audit logs: %v", err)
+	}
+	found := false
+	for _, log := range logs {
+		if log.Action == "prompt.version.created" {
+			found = true
+			if log.CreatedBy == nil || *log.CreatedBy != "creator@example.com" {
+				t.Fatalf("unexpected audit actor: %v", log.CreatedBy)
+			}
+			var payload map[string]interface{}
+			if err := json.Unmarshal(log.Payload, &payload); err != nil {
+				t.Fatalf("unmarshal payload: %v", err)
+			}
+			if payload["version_id"] != version.ID {
+				t.Fatalf("expected version id %s got %v", version.ID, payload["version_id"])
+			}
+		}
+	}
+	if !found {
+		t.Fatalf("expected prompt.version.created audit log")
+	}
+}
+
+func TestSetActiveVersionAuditLog(t *testing.T) {
+	svc, cleanup := setupPromptService(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	prompt, err := svc.CreatePrompt(ctx, CreatePromptInput{Name: "ActivateAudit"})
+	if err != nil {
+		t.Fatalf("create prompt: %v", err)
+	}
+
+	first, err := svc.CreatePromptVersion(ctx, CreatePromptVersionInput{
+		PromptID:  prompt.ID,
+		Body:      "Initial",
+		Activate:  true,
+		CreatedBy: "creator@example.com",
+	})
+	if err != nil {
+		t.Fatalf("create first version: %v", err)
+	}
+
+	second, err := svc.CreatePromptVersion(ctx, CreatePromptVersionInput{
+		PromptID:  prompt.ID,
+		Body:      "Second",
+		CreatedBy: "creator@example.com",
+	})
+	if err != nil {
+		t.Fatalf("create second version: %v", err)
+	}
+
+	if err := svc.SetActiveVersion(ctx, prompt.ID, second.ID, "activator@example.com"); err != nil {
+		t.Fatalf("set active version: %v", err)
+	}
+
+	logs, err := svc.repos.PromptAuditLog.ListByPrompt(ctx, prompt.ID, 10)
+	if err != nil {
+		t.Fatalf("list audit logs: %v", err)
+	}
+	found := false
+	for _, log := range logs {
+		if log.Action == "prompt.version.activated" {
+			var payload map[string]interface{}
+			if err := json.Unmarshal(log.Payload, &payload); err != nil {
+				t.Fatalf("unmarshal payload: %v", err)
+			}
+			if payload["version_id"] != second.ID {
+				continue
+			}
+			found = true
+			if log.CreatedBy == nil || *log.CreatedBy != "activator@example.com" {
+				t.Fatalf("unexpected activator: %v", log.CreatedBy)
+			}
+			if payload["previous_version_id"] != first.ID {
+				t.Fatalf("expected previous version id %s got %v", first.ID, payload["previous_version_id"])
+			}
+		}
+	}
+	if !found {
+		t.Fatalf("expected prompt.version.activated audit log")
 	}
 }
 
