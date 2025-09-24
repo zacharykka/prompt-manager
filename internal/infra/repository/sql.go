@@ -560,7 +560,7 @@ func (r *promptRepository) Restore(ctx context.Context, promptID string, params 
 		args = append(args, body)
 	}
 
-	query := fmt.Sprintf("UPDATE prompts SET %s WHERE id = %s AND deleted_at IS NOT NULL", strings.Join(sets, ", "), ph.Next())
+	query := fmt.Sprintf("UPDATE prompts SET %s WHERE id = %s AND status = 'deleted'", strings.Join(sets, ", "), ph.Next())
 	args = append(args, promptID)
 
 	result, err := r.db.ExecContext(ctx, query, args...)

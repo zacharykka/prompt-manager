@@ -102,6 +102,7 @@ func NewEngine(cfg *config.Config, logger *zap.Logger, opts RouterOptions) *gin.
 		writeGroup.POST("/:id/versions", opts.PromptHandler.CreatePromptVersion)
 		writeGroup.POST("/:id/versions/:versionId/activate", opts.PromptHandler.SetActiveVersion)
 		writeGroup.DELETE("/:id", opts.PromptHandler.DeletePrompt)
+		writeGroup.POST("/:id/restore", opts.PromptHandler.RestorePrompt)
 	}
 
 	logger.Info("http router ready", zap.String("env", cfg.App.Env))

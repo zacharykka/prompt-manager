@@ -246,6 +246,24 @@ func TestPromptRepositories_Workflow(t *testing.T) {
 		t.Fatalf("expected ErrNotFound after second delete got %v", err)
 	}
 
+	// 模拟旧数据：deleted_at 为空但 status 仍为 deleted
+	if _, err := db.ExecContext(ctx, "UPDATE prompts SET deleted_at = NULL WHERE id = ?", promptID); err != nil {
+		t.Fatalf("clear deleted_at: %v", err)
+	}
+	if err := repos.Prompts.Restore(ctx, promptID, domain.PromptRestoreParams{}); err != nil {
+		t.Fatalf("restore legacy prompt: %v", err)
+	}
+	legacyRestored, err := repos.Prompts.GetByID(ctx, promptID)
+	if err != nil {
+		t.Fatalf("get legacy restored prompt: %v", err)
+	}
+	if legacyRestored.Status != "active" {
+		t.Fatalf("expected active status after legacy restore got %s", legacyRestored.Status)
+	}
+
+	if err := repos.Prompts.Delete(ctx, promptID); err != nil {
+		t.Fatalf("delete after legacy restore: %v", err)
+	}
 	if err := repos.Prompts.Delete(ctx, promptID); err != domain.ErrNotFound {
 		t.Fatalf("expected ErrNotFound on repeated delete got %v", err)
 	}

@@ -74,6 +74,34 @@ func TestSecurityHeadersIntegration(t *testing.T) {
 	}
 }
 
+func TestRouterRegistersPromptRestoreRoute(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	cfg := &config.Config{
+		App: config.AppConfig{Name: "test", Env: "test"},
+		Auth: config.AuthConfig{
+			AccessTokenSecret: "secret",
+		},
+		Server: config.ServerConfig{
+			CORS: config.CORSConfig{AllowOrigins: []string{"*"}},
+		},
+	}
+
+	handler := NewPromptHandler(nil)
+	router := NewEngine(cfg, zapLoggerForTest(t), RouterOptions{
+		PromptHandler: handler,
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/prompts/123/restore", nil)
+	w := httptest.NewRecorder()
+
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("expected auth middleware to reject request with 401, got %d", w.Code)
+	}
+}
+
 func zapLoggerForTest(t *testing.T) *zap.Logger {
 	t.Helper()
 	return zap.NewNop()

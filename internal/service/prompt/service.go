@@ -362,7 +362,7 @@ func (s *Service) RestorePrompt(ctx context.Context, promptID, restoredBy string
 		}
 		return nil, err
 	}
-	if deleted.DeletedAt == nil {
+	if deleted.DeletedAt == nil && strings.ToLower(deleted.Status) != "deleted" {
 		return nil, ErrPromptNotDeleted
 	}
 

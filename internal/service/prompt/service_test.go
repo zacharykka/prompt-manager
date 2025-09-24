@@ -14,7 +14,7 @@ import (
 	"github.com/zacharykka/prompt-manager/internal/infra/repository"
 )
 
-func setupPromptService(t *testing.T) (*Service, func()) {
+func setupPromptServiceWithDB(t *testing.T) (*Service, *sql.DB, func()) {
 	t.Helper()
 	dsn := "file:prompt_service_test.db?mode=memory&cache=shared&_fk=1"
 	db, err := sql.Open("sqlite", dsn)
@@ -51,6 +51,11 @@ func setupPromptService(t *testing.T) (*Service, func()) {
 	svc := NewService(repos)
 
 	cleanup := func() { _ = db.Close() }
+	return svc, db, cleanup
+}
+
+func setupPromptService(t *testing.T) (*Service, func()) {
+	svc, _, cleanup := setupPromptServiceWithDB(t)
 	return svc, cleanup
 }
 
@@ -359,6 +364,33 @@ func TestRestorePrompt(t *testing.T) {
 
 	if _, err := svc.RestorePrompt(ctx, uuid.NewString(), "restorer@example.com"); err != ErrPromptNotFound {
 		t.Fatalf("expected ErrPromptNotFound restoring unknown prompt got %v", err)
+	}
+}
+
+func TestRestorePrompt_LegacyDeletedWithoutTimestamp(t *testing.T) {
+	svc, db, cleanup := setupPromptServiceWithDB(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	prompt, err := svc.CreatePrompt(ctx, CreatePromptInput{Name: "Legacy"})
+	if err != nil {
+		t.Fatalf("create prompt: %v", err)
+	}
+
+	if err := svc.DeletePrompt(ctx, prompt.ID, "deleter@example.com"); err != nil {
+		t.Fatalf("delete prompt: %v", err)
+	}
+
+	if _, err := db.ExecContext(ctx, "UPDATE prompts SET deleted_at = NULL WHERE id = ?", prompt.ID); err != nil {
+		t.Fatalf("clear deleted_at: %v", err)
+	}
+
+	restored, err := svc.RestorePrompt(ctx, prompt.ID, "restorer@example.com")
+	if err != nil {
+		t.Fatalf("restore prompt: %v", err)
+	}
+	if restored.Status != "active" {
+		t.Fatalf("expected active status got %s", restored.Status)
 	}
 }
 
