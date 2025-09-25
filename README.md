@@ -220,6 +220,26 @@
     - JSON 字段差异为键值级变化（`added|removed|modified`），值以字符串形式给出；后续可扩展更深层级 diff。
 
 > 兼容性注意：早期接口的驼峰字段（例如 `versionNumber`、`variablesSchema`）已废弃，不再返回。
+
+---
+
+## 版本列表分页与状态筛选（后端）
+
+为适配前端分页与筛选能力，版本列表接口支持如下参数与返回：
+
+- 路由：`GET /api/v1/prompts/:id/versions`
+- Query 参数：
+  - `status`（可选）：`draft|published|archived`，省略表示全部。
+  - `limit`（可选，默认 50）：单页条数。
+  - `offset`（可选，默认 0）：偏移量。
+- 响应：
+  - `data.items`: 版本数组。
+  - `data.meta`: `{ limit, offset, has_more }` 用于前端是否展示“下一页”。
+
+实现要点：
+- Service 新增 `ListPromptVersionsEx`，内部使用 `limit+1` 拉取并裁剪，计算 `has_more`。
+- Repository 新增 `ListByPromptAndStatus`，在 SQL 层按 `status` 过滤。
+
 3. **Milestone 3：稳定性与观测**
    - 缓存一致性策略实现（锁、抖动、空值缓存），指标上报与报警。
    - Docker Compose 本地环境、集成测试套件、性能基准测试。

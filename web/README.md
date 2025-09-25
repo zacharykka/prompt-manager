@@ -137,9 +137,24 @@ pnpm run preview
 - 入口组件：`features/prompts/components/prompt-version-panel.tsx`
   - 仅在列表卡片内渲染版本与操作；差异弹窗通过内部状态控制。
   - 关闭弹窗会重置比较模式为 `previous`，避免下次进入混淆。
-  - 遮罩层覆盖与 body 默认 margin 冲突已处理，`index.css` 添加 `body { @apply m-0; }` 以覆盖浏览器默认外边距。
+- 遮罩层覆盖与 body 默认 margin 冲突已处理，`index.css` 添加 `body { @apply m-0; }` 以覆盖浏览器默认外边距。
 
 ### 已知限制与后续
 
 - JSON 字段差异（`variables_schema`、`metadata`）目前按键值级别展示字符串化结果；后续可扩展更细粒度比较与高亮。
 - 版本备注/评论未实现，后续按规划补充。
+
+---
+
+## 版本列表分页与状态筛选（前端）
+
+- 版本历史卡片顶部提供状态筛选（全部/已发布/草稿/归档）与每页条数（10/20/50）切换，并带“上一页/下一页”分页按钮。
+- 数据来源：`usePromptVersionsQuery(promptId, { status, limit, offset })`，与后端接口返回的 `meta.has_more` 联动控制分页。
+- 类型：`PromptVersionListParams` 新增 `status`，`PromptVersionListMeta` 提供 `limit/offset/hasMore`。
+
+## Diff 更细渲染（折叠视图）
+
+- 弹窗右上角新增“仅显示变更”开关（compact 模式）：
+  - 对 `equal` 片段进行压缩显示（前后各 80 字，中间省略）；
+  - `insert/delete` 仍保持高亮（绿色/红色删除线）。
+- 适合长文档对比场景，减少无关相同文本占据屏幕空间。
