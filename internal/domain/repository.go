@@ -33,6 +33,10 @@ type PromptVersionRepository interface {
     ListByPrompt(ctx context.Context, promptID string, limit, offset int) ([]*PromptVersion, error)
     // ListByPromptAndStatus 基于状态过滤版本列表（如 draft/published/archived）。
     ListByPromptAndStatus(ctx context.Context, promptID string, status string, limit, offset int) ([]*PromptVersion, error)
+    // CountByPrompt 统计指定 Prompt 的版本总数。
+    CountByPrompt(ctx context.Context, promptID string) (int64, error)
+    // CountByPromptAndStatus 统计指定 Prompt 在某状态下的版本总数。
+    CountByPromptAndStatus(ctx context.Context, promptID string, status string) (int64, error)
     GetLatestVersionNumber(ctx context.Context, promptID string) (int, error)
     GetPreviousVersion(ctx context.Context, promptID string, versionNumber int) (*PromptVersion, error)
 }

@@ -23,6 +23,8 @@ interface RawListResponse {
     limit: number
     offset: number
     has_more: boolean
+    total?: number
+    pages?: number
   }
 }
 
@@ -87,6 +89,8 @@ export async function listPromptVersions(
       limit: raw.meta.limit,
       offset: raw.meta.offset,
       hasMore: raw.meta.has_more,
+      total: raw.meta.total,
+      pages: raw.meta.pages,
     }
     result.meta = meta
   }

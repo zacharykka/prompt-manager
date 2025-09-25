@@ -91,6 +91,8 @@ export interface PromptVersionListMeta {
   limit: number
   offset: number
   hasMore: boolean
+  total?: number
+  pages?: number
 }
 
 export interface PromptVersionListResult {

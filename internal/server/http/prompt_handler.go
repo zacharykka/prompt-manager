@@ -225,6 +225,8 @@ func (h *PromptHandler) ListPromptVersions(ctx *gin.Context) {
             "limit":   page.Limit,
             "offset":  page.Offset,
             "has_more": page.HasMore,
+            "total":    page.Total,
+            "pages":    page.Pages,
         },
     })
 }

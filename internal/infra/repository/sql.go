@@ -769,6 +769,28 @@ func (r *promptVersionRepository) GetLatestVersionNumber(ctx context.Context, pr
 	return 0, nil
 }
 
+// CountByPrompt 统计指定 Prompt 的版本总数。
+func (r *promptVersionRepository) CountByPrompt(ctx context.Context, promptID string) (int64, error) {
+    ph := database.NewPlaceholderBuilder(r.dialect)
+    query := fmt.Sprintf(`SELECT COUNT(1) FROM prompt_versions WHERE prompt_id = %s`, ph.Next())
+    var total int64
+    if err := r.db.QueryRowContext(ctx, query, promptID).Scan(&total); err != nil {
+        return 0, err
+    }
+    return total, nil
+}
+
+// CountByPromptAndStatus 统计指定 Prompt 在某状态下的版本总数。
+func (r *promptVersionRepository) CountByPromptAndStatus(ctx context.Context, promptID string, status string) (int64, error) {
+    ph := database.NewPlaceholderBuilder(r.dialect)
+    query := fmt.Sprintf(`SELECT COUNT(1) FROM prompt_versions WHERE prompt_id = %s AND status = %s`, ph.Next(), ph.Next())
+    var total int64
+    if err := r.db.QueryRowContext(ctx, query, promptID, status).Scan(&total); err != nil {
+        return 0, err
+    }
+    return total, nil
+}
+
 func (r *promptVersionRepository) GetPreviousVersion(ctx context.Context, promptID string, versionNumber int) (*domain.PromptVersion, error) {
 	ph := database.NewPlaceholderBuilder(r.dialect)
 	query := fmt.Sprintf(`SELECT id, prompt_id, version_number, body, variables_schema, status, metadata, created_by, created_at

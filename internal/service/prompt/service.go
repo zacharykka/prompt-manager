@@ -344,6 +344,8 @@ type PromptVersionPage struct {
     Limit  int
     Offset int
     HasMore bool
+    Total  int64
+    Pages  int
 }
 
 // ListPromptVersionsEx 支持状态筛选与 hasMore 的分页版本列表。
@@ -359,19 +361,40 @@ func (s *Service) ListPromptVersionsEx(ctx context.Context, promptID string, lim
 
     var list []*domain.PromptVersion
     if strings.TrimSpace(status) != "" {
-        list, err = s.repos.PromptVersions.ListByPromptAndStatus(ctx, promptID, strings.TrimSpace(status), effectiveLimit, offset)
+        normalized := strings.TrimSpace(status)
+        list, err = s.repos.PromptVersions.ListByPromptAndStatus(ctx, promptID, normalized, effectiveLimit, offset)
+        if err != nil {
+            return nil, err
+        }
+        total, cerr := s.repos.PromptVersions.CountByPromptAndStatus(ctx, promptID, normalized)
+        if cerr != nil {
+            return nil, cerr
+        }
+        // 计算分页页数
+        pages := int((total + int64(limit) - 1) / int64(limit))
+        hasMore := false
+        if len(list) > limit {
+            hasMore = true
+            list = list[:limit]
+        }
+        return &PromptVersionPage{Items: list, Limit: limit, Offset: offset, HasMore: hasMore, Total: total, Pages: pages}, nil
     } else {
         list, err = s.repos.PromptVersions.ListByPrompt(ctx, promptID, effectiveLimit, offset)
+        if err != nil {
+            return nil, err
+        }
+        total, cerr := s.repos.PromptVersions.CountByPrompt(ctx, promptID)
+        if cerr != nil {
+            return nil, cerr
+        }
+        pages := int((total + int64(limit) - 1) / int64(limit))
+        hasMore := false
+        if len(list) > limit {
+            hasMore = true
+            list = list[:limit]
+        }
+        return &PromptVersionPage{Items: list, Limit: limit, Offset: offset, HasMore: hasMore, Total: total, Pages: pages}, nil
     }
-    if err != nil {
-        return nil, err
-    }
-    hasMore := false
-    if len(list) > limit {
-        hasMore = true
-        list = list[:limit]
-    }
-    return &PromptVersionPage{Items: list, Limit: limit, Offset: offset, HasMore: hasMore}, nil
 }
 
 // SetActiveVersion 将指定版本设为当前启用版本。

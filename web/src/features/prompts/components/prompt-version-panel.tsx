@@ -200,6 +200,19 @@ export function PromptVersionPanel({ promptId, activeVersionId, promptName }: Pr
             })}
           </ul>
           <div className="mt-4 flex items-center justify-end gap-3 border-t border-slate-100 pt-4 text-xs text-slate-600">
+            <span className="mr-auto pl-1">
+              {(() => {
+                const page = Math.floor(offset / Math.max(1, limit)) + 1
+                const total = data?.meta?.total
+                const pages = data?.meta?.pages
+                if (total != null && pages != null) {
+                  const from = offset + 1
+                  const to = Math.min(offset + limit, total)
+                  return `第 ${page} / ${pages} 页 · 显示 ${from}-${to} / ${total}`
+                }
+                return `第 ${page} 页`
+              })()}
+            </span>
             <span className="select-none">每页</span>
             {[10, 20, 50].map((n) => (
               <Button
