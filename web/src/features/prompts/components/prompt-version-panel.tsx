@@ -31,8 +31,15 @@ export function PromptVersionPanel({ promptId, activeVersionId, promptName }: Pr
   const [isDiffDialogOpen, setDiffDialogOpen] = useState(false)
   const [compareMode, setCompareMode] = useState<CompareMode>('previous')
   const [feedback, setFeedback] = useState<FeedbackState>(null)
+  const [statusFilter, setStatusFilter] = useState<'all' | 'published' | 'draft' | 'archived'>('all')
+  const [limit, setLimit] = useState(10)
+  const [offset, setOffset] = useState(0)
 
-  const { data, isLoading, isError, error, refetch } = usePromptVersionsQuery(promptId)
+  const { data, isLoading, isError, error, refetch } = usePromptVersionsQuery(promptId, {
+    limit,
+    offset,
+    status: statusFilter === 'all' ? undefined : statusFilter,
+  })
   const versionItems = data?.items
   const versions = useMemo(() => versionItems ?? [], [versionItems])
   const defaultVersionId = useMemo(() => {
@@ -110,10 +117,69 @@ export function PromptVersionPanel({ promptId, activeVersionId, promptName }: Pr
             <h2 className="text-xl font-semibold text-slate-900">版本历史</h2>
             <p className="text-sm text-slate-600">查看变更记录，比较差异，并将任意版本设为当前版本。</p>
           </div>
-          <Button variant="secondary" size="sm" onClick={() => refetch()} disabled={isLoading}>
-            刷新
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="secondary" size="sm" onClick={() => refetch()} disabled={isLoading}>
+              刷新
+            </Button>
+          </div>
         </header>
+
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2 text-sm">
+            <span className="text-slate-500">状态筛选</span>
+            {(['all', 'published', 'draft', 'archived'] as const).map((s) => (
+              <Button
+                key={s}
+                type="button"
+                size="xs"
+                variant={statusFilter === s ? 'primary' : 'secondary'}
+                onClick={() => {
+                  setStatusFilter(s)
+                  setOffset(0)
+                }}
+              >
+                {s === 'all' ? '全部' : s === 'published' ? '已发布' : s === 'draft' ? '草稿' : '归档'}
+              </Button>
+            ))}
+          </div>
+          <div className="flex items-center gap-2 text-sm">
+            <span className="text-slate-500">每页</span>
+            {[10, 20, 50].map((n) => (
+              <Button
+                key={n}
+                type="button"
+                size="xs"
+                variant={limit === n ? 'primary' : 'secondary'}
+                onClick={() => {
+                  setLimit(n)
+                  setOffset(0)
+                }}
+              >
+                {n}
+              </Button>
+            ))}
+            <div className="ml-2 flex items-center gap-2">
+              <Button
+                type="button"
+                size="xs"
+                variant="secondary"
+                disabled={offset <= 0 || isLoading}
+                onClick={() => setOffset(Math.max(0, offset - limit))}
+              >
+                上一页
+              </Button>
+              <Button
+                type="button"
+                size="xs"
+                variant="secondary"
+                disabled={isLoading || (data?.meta ? !data.meta.hasMore : (versions.length < limit))}
+                onClick={() => setOffset(offset + limit)}
+              >
+                下一页
+              </Button>
+            </div>
+          </div>
+        </div>
 
         {feedback ? (
           <Alert variant={feedback.type === 'success' ? 'success' : 'error'} className="text-sm">
@@ -252,6 +318,7 @@ function PromptVersionDiffDialog({
   onClose,
   promptName,
 }: PromptVersionDiffDialogProps) {
+  const [compact, setCompact] = useState(true)
   if (!open || !version) {
     return null
   }
@@ -285,6 +352,15 @@ function PromptVersionDiffDialog({
       return <p className="text-sm text-slate-500">正文与比较版本一致。</p>
     }
 
+    const renderText = (text: string) => {
+      if (!compact) return text
+      // 对较长的 equal 片段进行压缩展示
+      if (text.length > 200) {
+        return `${text.slice(0, 80)} … ${text.slice(-80)}`
+      }
+      return text
+    }
+
     return (
       <div className="rounded-xl bg-slate-950 p-4 font-mono text-xs text-slate-100 whitespace-pre-wrap overflow-x-auto">
         {diff.body.map((segment, index) => {
@@ -293,10 +369,12 @@ function PromptVersionDiffDialog({
               ? 'text-emerald-300'
               : segment.type === 'delete'
                 ? 'text-rose-300 line-through'
-                : 'text-slate-300'
+                : compact
+                  ? 'text-slate-400'
+                  : 'text-slate-300'
           return (
             <span key={`${segment.type}-${index}`} className={className}>
-              {segment.text}
+              {segment.type === 'equal' ? renderText(segment.text) : segment.text}
             </span>
           )
         })}
@@ -366,29 +444,38 @@ function PromptVersionDiffDialog({
         </header>
 
         <div className="flex-1 space-y-4 overflow-y-auto px-6 py-5">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <p className="text-xs text-slate-500">
-              {compareMode === 'active' ? '与当前正在使用的版本比较。' : '与上一版本比较。'}
-            </p>
-            <div className="flex items-center gap-2">
-              <Button
-                type="button"
-                size="sm"
-                variant={compareMode === 'previous' ? 'primary' : 'secondary'}
-                onClick={() => onCompareModeChange('previous')}
-              >
-                对上一版本
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                variant={compareMode === 'active' ? 'primary' : 'secondary'}
-                onClick={() => onCompareModeChange('active')}
-              >
-                对当前版本
-              </Button>
-            </div>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <p className="text-xs text-slate-500">
+            {compareMode === 'active' ? '与当前正在使用的版本比较。' : '与上一版本比较。'}
+          </p>
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              size="sm"
+              variant={compareMode === 'previous' ? 'primary' : 'secondary'}
+              onClick={() => onCompareModeChange('previous')}
+            >
+              对上一版本
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant={compareMode === 'active' ? 'primary' : 'secondary'}
+              onClick={() => onCompareModeChange('active')}
+            >
+              对当前版本
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant={compact ? 'primary' : 'secondary'}
+              onClick={() => setCompact((v) => !v)}
+              title="仅显示变更（压缩相同片段）"
+            >
+              仅显示变更
+            </Button>
           </div>
+        </div>
 
           {diff ? (
             <div className="rounded-xl bg-slate-50 p-4 text-xs text-slate-600">

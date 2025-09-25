@@ -1,6 +1,7 @@
 import { apiClient } from '@/libs/http/client'
 import type {
   PromptVersion,
+  PromptVersionListMeta,
   PromptVersionListParams,
   PromptVersionListResult,
 } from '@/features/prompts/types'
@@ -18,6 +19,11 @@ type RawPromptVersion = {
 
 interface RawListResponse {
   items: RawPromptVersion[]
+  meta?: {
+    limit: number
+    offset: number
+    has_more: boolean
+  }
 }
 
 interface SuccessResponse<T> {
@@ -64,12 +70,25 @@ export async function listPromptVersions(
   const response = await apiClient.get<SuccessResponse<RawListResponse>>(
     `/prompts/${promptId}/versions`,
     {
-      params,
+      params: {
+        limit: params.limit,
+        offset: params.offset,
+        status: params.status,
+      },
     },
   )
 
   const raw = response.data.data
-  return {
+  const result: PromptVersionListResult = {
     items: (raw.items ?? []).map(mapPromptVersion),
   }
+  if (raw.meta) {
+    const meta: PromptVersionListMeta = {
+      limit: raw.meta.limit,
+      offset: raw.meta.offset,
+      hasMore: raw.meta.has_more,
+    }
+    result.meta = meta
+  }
+  return result
 }

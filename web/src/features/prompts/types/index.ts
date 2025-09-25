@@ -79,11 +79,21 @@ export interface PromptVersionDiff {
   metadata?: PromptVersionDiffField
 }
 
+export type PromptVersionStatus = 'draft' | 'published' | 'archived'
+
 export interface PromptVersionListParams {
   limit?: number
   offset?: number
+  status?: PromptVersionStatus
+}
+
+export interface PromptVersionListMeta {
+  limit: number
+  offset: number
+  hasMore: boolean
 }
 
 export interface PromptVersionListResult {
   items: PromptVersion[]
+  meta?: PromptVersionListMeta
 }

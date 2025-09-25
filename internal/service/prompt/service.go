@@ -338,6 +338,42 @@ func (s *Service) ListPromptVersions(ctx context.Context, promptID string, limit
 	return versions, nil
 }
 
+// PromptVersionPage 版本分页结果。
+type PromptVersionPage struct {
+    Items  []*domain.PromptVersion
+    Limit  int
+    Offset int
+    HasMore bool
+}
+
+// ListPromptVersionsEx 支持状态筛选与 hasMore 的分页版本列表。
+func (s *Service) ListPromptVersionsEx(ctx context.Context, promptID string, limit, offset int, status string) (*PromptVersionPage, error) {
+    _, err := s.GetPrompt(ctx, promptID)
+    if err != nil {
+        return nil, err
+    }
+    if limit <= 0 {
+        limit = 50
+    }
+    effectiveLimit := limit + 1 // 取多一条用于判断是否还有下一页
+
+    var list []*domain.PromptVersion
+    if strings.TrimSpace(status) != "" {
+        list, err = s.repos.PromptVersions.ListByPromptAndStatus(ctx, promptID, strings.TrimSpace(status), effectiveLimit, offset)
+    } else {
+        list, err = s.repos.PromptVersions.ListByPrompt(ctx, promptID, effectiveLimit, offset)
+    }
+    if err != nil {
+        return nil, err
+    }
+    hasMore := false
+    if len(list) > limit {
+        hasMore = true
+        list = list[:limit]
+    }
+    return &PromptVersionPage{Items: list, Limit: limit, Offset: offset, HasMore: hasMore}, nil
+}
+
 // SetActiveVersion 将指定版本设为当前启用版本。
 func (s *Service) SetActiveVersion(ctx context.Context, promptID, versionID, activatedBy string) error {
 	prompt, err := s.GetPrompt(ctx, promptID)

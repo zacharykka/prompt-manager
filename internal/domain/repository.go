@@ -28,11 +28,13 @@ type PromptRepository interface {
 
 // PromptVersionRepository 定义 Prompt 版本存取接口。
 type PromptVersionRepository interface {
-	Create(ctx context.Context, version *PromptVersion) error
-	GetByID(ctx context.Context, versionID string) (*PromptVersion, error)
-	ListByPrompt(ctx context.Context, promptID string, limit, offset int) ([]*PromptVersion, error)
-	GetLatestVersionNumber(ctx context.Context, promptID string) (int, error)
-	GetPreviousVersion(ctx context.Context, promptID string, versionNumber int) (*PromptVersion, error)
+    Create(ctx context.Context, version *PromptVersion) error
+    GetByID(ctx context.Context, versionID string) (*PromptVersion, error)
+    ListByPrompt(ctx context.Context, promptID string, limit, offset int) ([]*PromptVersion, error)
+    // ListByPromptAndStatus 基于状态过滤版本列表（如 draft/published/archived）。
+    ListByPromptAndStatus(ctx context.Context, promptID string, status string, limit, offset int) ([]*PromptVersion, error)
+    GetLatestVersionNumber(ctx context.Context, promptID string) (int, error)
+    GetPreviousVersion(ctx context.Context, promptID string, versionNumber int) (*PromptVersion, error)
 }
 
 // PromptExecutionLogRepository 定义 Prompt 执行日志接口。

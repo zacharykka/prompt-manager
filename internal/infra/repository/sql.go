@@ -706,6 +706,55 @@ FROM prompt_versions WHERE prompt_id = %s ORDER BY version_number DESC LIMIT %s 
 	return versions, nil
 }
 
+// ListByPromptAndStatus 列出指定 Prompt 且匹配状态的版本记录。
+func (r *promptVersionRepository) ListByPromptAndStatus(ctx context.Context, promptID string, status string, limit, offset int) ([]*domain.PromptVersion, error) {
+    if limit <= 0 {
+        limit = 50
+    }
+    if offset < 0 {
+        offset = 0
+    }
+    ph := database.NewPlaceholderBuilder(r.dialect)
+    query := fmt.Sprintf(`SELECT id, prompt_id, version_number, body, variables_schema, status, metadata, created_by, created_at
+FROM prompt_versions WHERE prompt_id = %s AND status = %s ORDER BY version_number DESC LIMIT %s OFFSET %s`, ph.Next(), ph.Next(), ph.Next(), ph.Next())
+
+    rows, err := r.db.QueryContext(ctx, query, promptID, status, limit, offset)
+    if err != nil {
+        return nil, err
+    }
+    defer rows.Close()
+
+    var versions []*domain.PromptVersion
+    for rows.Next() {
+        var row promptVersionRow
+        if err := rows.Scan(&row.id, &row.promptID, &row.versionNumber, &row.body, &row.variablesSchema, &row.status, &row.metadata, &row.createdBy, &row.createdAt); err != nil {
+            return nil, err
+        }
+        version := &domain.PromptVersion{
+            ID:            row.id,
+            PromptID:      row.promptID,
+            VersionNumber: row.versionNumber,
+            Body:          row.body,
+            Status:        row.status,
+            CreatedAt:     row.createdAt,
+        }
+        if row.variablesSchema.Valid {
+            version.VariablesSchema = json.RawMessage(row.variablesSchema.String)
+        }
+        if row.metadata.Valid {
+            version.Metadata = json.RawMessage(row.metadata.String)
+        }
+        if row.createdBy.Valid {
+            version.CreatedBy = &row.createdBy.String
+        }
+        versions = append(versions, version)
+    }
+    if err := rows.Err(); err != nil {
+        return nil, err
+    }
+    return versions, nil
+}
+
 func (r *promptVersionRepository) GetLatestVersionNumber(ctx context.Context, promptID string) (int, error) {
 	ph := database.NewPlaceholderBuilder(r.dialect)
 	query := fmt.Sprintf(`SELECT COALESCE(MAX(version_number), 0) FROM prompt_versions WHERE prompt_id = %s`, ph.Next())

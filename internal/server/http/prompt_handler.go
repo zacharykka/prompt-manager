@@ -210,15 +210,23 @@ func (h *PromptHandler) CreatePromptVersion(ctx *gin.Context) {
 
 // ListPromptVersions 列出 Prompt 的版本。
 func (h *PromptHandler) ListPromptVersions(ctx *gin.Context) {
-	limit, offset := parsePagination(ctx.Query("limit"), ctx.Query("offset"))
+    limit, offset := parsePagination(ctx.Query("limit"), ctx.Query("offset"))
+    status := strings.TrimSpace(ctx.Query("status"))
 
-	versions, err := h.service.ListPromptVersions(ctx, ctx.Param("id"), limit, offset)
-	if err != nil {
-		h.handleError(ctx, err)
-		return
-	}
+    page, err := h.service.ListPromptVersionsEx(ctx, ctx.Param("id"), limit, offset, status)
+    if err != nil {
+        h.handleError(ctx, err)
+        return
+    }
 
-	httpx.RespondOK(ctx, gin.H{"items": versions})
+    httpx.RespondOK(ctx, gin.H{
+        "items": page.Items,
+        "meta": gin.H{
+            "limit":   page.Limit,
+            "offset":  page.Offset,
+            "has_more": page.HasMore,
+        },
+    })
 }
 
 // DiffPromptVersion 对比指定 Prompt 版本与目标版本差异。
