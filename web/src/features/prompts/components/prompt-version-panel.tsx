@@ -31,14 +31,12 @@ export function PromptVersionPanel({ promptId, activeVersionId, promptName }: Pr
   const [isDiffDialogOpen, setDiffDialogOpen] = useState(false)
   const [compareMode, setCompareMode] = useState<CompareMode>('previous')
   const [feedback, setFeedback] = useState<FeedbackState>(null)
-  const [statusFilter, setStatusFilter] = useState<'all' | 'published' | 'draft' | 'archived'>('all')
   const [limit, setLimit] = useState(10)
   const [offset, setOffset] = useState(0)
 
   const { data, isLoading, isError, error, refetch } = usePromptVersionsQuery(promptId, {
     limit,
     offset,
-    status: statusFilter === 'all' ? undefined : statusFilter,
   })
   const versionItems = data?.items
   const versions = useMemo(() => versionItems ?? [], [versionItems])
@@ -124,62 +122,7 @@ export function PromptVersionPanel({ promptId, activeVersionId, promptName }: Pr
           </div>
         </header>
 
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-2 text-sm">
-            <span className="text-slate-500">状态筛选</span>
-            {(['all', 'published', 'draft', 'archived'] as const).map((s) => (
-              <Button
-                key={s}
-                type="button"
-                size="xs"
-                variant={statusFilter === s ? 'primary' : 'secondary'}
-                onClick={() => {
-                  setStatusFilter(s)
-                  setOffset(0)
-                }}
-              >
-                {s === 'all' ? '全部' : s === 'published' ? '已发布' : s === 'draft' ? '草稿' : '归档'}
-              </Button>
-            ))}
-          </div>
-          <div className="flex items-center gap-2 text-sm">
-            <span className="text-slate-500">每页</span>
-            {[10, 20, 50].map((n) => (
-              <Button
-                key={n}
-                type="button"
-                size="xs"
-                variant={limit === n ? 'primary' : 'secondary'}
-                onClick={() => {
-                  setLimit(n)
-                  setOffset(0)
-                }}
-              >
-                {n}
-              </Button>
-            ))}
-            <div className="ml-2 flex items-center gap-2">
-              <Button
-                type="button"
-                size="xs"
-                variant="secondary"
-                disabled={offset <= 0 || isLoading}
-                onClick={() => setOffset(Math.max(0, offset - limit))}
-              >
-                上一页
-              </Button>
-              <Button
-                type="button"
-                size="xs"
-                variant="secondary"
-                disabled={isLoading || (data?.meta ? !data.meta.hasMore : (versions.length < limit))}
-                onClick={() => setOffset(offset + limit)}
-              >
-                下一页
-              </Button>
-            </div>
-          </div>
-        </div>
+        {/* 分页控制移动到底部；此处不再展示筛选控件 */}
 
         {feedback ? (
           <Alert variant={feedback.type === 'success' ? 'success' : 'error'} className="text-sm">
@@ -195,7 +138,8 @@ export function PromptVersionPanel({ promptId, activeVersionId, promptName }: Pr
           </Alert>
         ) : versions.length === 0 ? (
           <p className="text-sm text-slate-500">暂无版本记录，保存内容后会自动生成版本。</p>
-        ) : (
+      ) : (
+        <>
           <ul className="divide-y divide-slate-100 overflow-hidden rounded-2xl border border-slate-200 bg-white">
             {versions.map((version) => {
               const isSelected = version.id === selectedVersionId
@@ -255,7 +199,45 @@ export function PromptVersionPanel({ promptId, activeVersionId, promptName }: Pr
               )
             })}
           </ul>
-        )}
+          <div className="mt-4 flex items-center justify-end gap-3 text-xs">
+            <span className="text-slate-500">每页</span>
+            {[10, 20, 50].map((n) => (
+              <Button
+                key={n}
+                type="button"
+                size="xs"
+                variant={limit === n ? 'primary' : 'secondary'}
+                onClick={() => {
+                  setLimit(n)
+                  setOffset(0)
+                }}
+              >
+                {n}
+              </Button>
+            ))}
+            <div className="ml-2 flex items-center gap-2">
+              <Button
+                type="button"
+                size="xs"
+                variant="secondary"
+                disabled={offset <= 0 || isLoading}
+                onClick={() => setOffset(Math.max(0, offset - limit))}
+              >
+                上一页
+              </Button>
+              <Button
+                type="button"
+                size="xs"
+                variant="secondary"
+                disabled={isLoading || (data?.meta ? !data.meta.hasMore : versions.length < limit)}
+                onClick={() => setOffset(offset + limit)}
+              >
+                下一页
+              </Button>
+            </div>
+          </div>
+        </>
+      )}
       </section>
 
       <PromptVersionDiffDialog
