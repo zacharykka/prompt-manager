@@ -36,18 +36,18 @@ type FieldDiff struct {
 
 type VersionSummary struct {
 	ID            string    `json:"id"`
-	VersionNumber int       `json:"versionNumber"`
-	CreatedBy     *string   `json:"createdBy,omitempty"`
-	CreatedAt     time.Time `json:"createdAt"`
+	VersionNumber int       `json:"version_number"`
+	CreatedBy     *string   `json:"created_by,omitempty"`
+	CreatedAt     time.Time `json:"created_at"`
 	Status        string    `json:"status"`
 }
 
 type PromptVersionDiff struct {
-	PromptID  string         `json:"promptId"`
+	PromptID  string         `json:"prompt_id"`
 	Base      VersionSummary `json:"base"`
 	Target    VersionSummary `json:"target"`
 	Body      []DiffSegment  `json:"body"`
-	Variables *FieldDiff     `json:"variablesSchema,omitempty"`
+	Variables *FieldDiff     `json:"variables_schema,omitempty"`
 	Metadata  *FieldDiff     `json:"metadata,omitempty"`
 }
 

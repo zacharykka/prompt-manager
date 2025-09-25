@@ -36,7 +36,7 @@ interface RawDiff {
   base: RawDiffSummary
   target: RawDiffSummary
   body: RawDiffSegment[]
-  variablesSchema?: RawDiffField
+  variables_schema?: RawDiffField
   metadata?: RawDiffField
 }
 
@@ -106,7 +106,7 @@ export async function getPromptVersionDiff(
     base: mapSummary(raw.base),
     target: mapSummary(raw.target),
     body: mapSegments(raw.body ?? []),
-    variablesSchema: mapField(raw.variablesSchema),
+    variablesSchema: mapField(raw.variables_schema),
     metadata: mapField(raw.metadata),
   }
 }

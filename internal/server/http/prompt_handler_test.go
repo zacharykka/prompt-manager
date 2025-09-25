@@ -416,7 +416,7 @@ func TestPromptHandler_DiffVersion(t *testing.T) {
 						Left  string `json:"left"`
 						Right string `json:"right"`
 					} `json:"changes"`
-				} `json:"variablesSchema"`
+				} `json:"variables_schema"`
 			} `json:"diff"`
 		} `json:"data"`
 	}
