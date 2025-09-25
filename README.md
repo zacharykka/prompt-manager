@@ -182,6 +182,44 @@
    - 🔜 **Prompt 版本控制增强（阶段二）**：
      - 优化版本恢复/并发校验、缓存刷新策略。
      - 根据前端反馈进一步扩展接口（例如版本评论、审批流）。
+
+---
+
+## 版本接口与 Diff 契约（最新）
+
+为统一前后端契约，版本相关接口已全部采用 snake_case 字段；前端对应解析已同步更新。
+
+- 列表版本：`GET /api/v1/prompts/:id/versions`
+  - 响应 `items[]` 字段：
+    - `id`, `version_number`, `status`, `created_by`, `created_at`, 以及可选 `variables_schema`、`metadata`（历史数据可能为空）。
+
+- 创建版本：`POST /api/v1/prompts/:id/versions`
+  - 请求：`body`（必填）、`status`（可选，默认 `published`）、`variables_schema`、`metadata`、`activate`（布尔）。
+  - 审计：写入 `prompt.version.created`（payload 含 `version_id`、`version_number`、`status`、`activated_inline`）。
+
+- 激活版本：`POST /api/v1/prompts/:id/versions/:versionId/activate`
+  - 行为：更新 `prompts.active_version_id` 与 `prompts.body` 快照。
+  - 审计：写入 `prompt.version.activated`（payload 含 `version_id`、`version_number`）。
+
+- 版本 Diff：`GET /api/v1/prompts/:id/versions/:versionId/diff?compareTo=previous|active` 或 `?targetVersionId=xxx`
+  - 响应示例（仅展示字段结构）：
+    ```json
+    {
+      "diff": {
+        "prompt_id": "p_123",
+        "base":   {"id":"v2","version_number":2,"created_by":"user@x.com","created_at":"2025-09-24T21:42:00Z","status":"published"},
+        "target": {"id":"v1","version_number":1,"created_by":null,"created_at":"2025-09-23T15:37:00Z","status":"published"},
+        "body": [{"type":"insert|delete|equal","text":"..."}],
+        "variables_schema": {"changes": [{"key":"foo","type":"modified","left":"bar","right":"baz"}]},
+        "metadata": {"changes": [{"key":"k","type":"added","right":"1"}]}
+      }
+    }
+    ```
+  - 说明：
+    - 文本差异为片段数组，`type` 取值 `insert|delete|equal`；前端根据类型高亮。
+    - JSON 字段差异为键值级变化（`added|removed|modified`），值以字符串形式给出；后续可扩展更深层级 diff。
+
+> 兼容性注意：早期接口的驼峰字段（例如 `versionNumber`、`variablesSchema`）已废弃，不再返回。
 3. **Milestone 3：稳定性与观测**
    - 缓存一致性策略实现（锁、抖动、空值缓存），指标上报与报警。
    - Docker Compose 本地环境、集成测试套件、性能基准测试。

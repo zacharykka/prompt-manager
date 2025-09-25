@@ -111,3 +111,35 @@ pnpm run preview
 ```
 
 默认使用 Vite 提供的 React + TypeScript 模板，后续可根据规划引入 Tailwind CSS、TanStack Query 等依赖。
+
+---
+
+## 版本面板与差异弹窗（最新）
+
+最近改动将“版本历史”与“差异对比”解耦：
+
+- “版本历史”卡片仅展示版本列表与操作按钮；点击“查看差异”后通过弹窗展示对比结果。
+- 弹窗特性：
+  - 支持“对上一版本/对当前版本”切换；
+  - 可点击遮罩或右上角按钮关闭；
+  - 内容区域垂直可滚动，正文 diff 支持横向滚动；
+  - 默认从后端返回的“当前激活版本”选择初始项；
+  - 时间展示统一通过安全格式化，后端为空或非法时间时显示 `—`。
+
+### Hooks 与 API 契约
+
+- `usePromptVersionsQuery(promptId)`：获取版本列表，用于渲染“版本历史”。
+- `usePromptVersionDiff(promptId, versionId, { compareTo: 'previous' | 'active' })`：获取当前选择版本与目标的差异。
+- 后端 diff 响应已统一为 snake_case（示例字段：`version_number`、`created_by`、`created_at`、`variables_schema`）。前端解析已同步（见 `features/prompts/api/get-prompt-version-diff.ts`）。
+
+### 组件要点
+
+- 入口组件：`features/prompts/components/prompt-version-panel.tsx`
+  - 仅在列表卡片内渲染版本与操作；差异弹窗通过内部状态控制。
+  - 关闭弹窗会重置比较模式为 `previous`，避免下次进入混淆。
+  - 遮罩层覆盖与 body 默认 margin 冲突已处理，`index.css` 添加 `body { @apply m-0; }` 以覆盖浏览器默认外边距。
+
+### 已知限制与后续
+
+- JSON 字段差异（`variables_schema`、`metadata`）目前按键值级别展示字符串化结果；后续可扩展更细粒度比较与高亮。
+- 版本备注/评论未实现，后续按规划补充。
