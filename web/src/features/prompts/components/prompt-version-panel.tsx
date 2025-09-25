@@ -199,14 +199,16 @@ export function PromptVersionPanel({ promptId, activeVersionId, promptName }: Pr
               )
             })}
           </ul>
-          <div className="mt-4 flex items-center justify-end gap-3 text-xs">
-            <span className="text-slate-500">每页</span>
+          <div className="mt-4 flex items-center justify-end gap-3 border-t border-slate-100 pt-4 text-xs text-slate-600">
+            <span className="select-none">每页</span>
             {[10, 20, 50].map((n) => (
               <Button
                 key={n}
                 type="button"
-                size="xs"
+                size="sm"
+                className="min-w-[40px]"
                 variant={limit === n ? 'primary' : 'secondary'}
+                aria-pressed={limit === n}
                 onClick={() => {
                   setLimit(n)
                   setOffset(0)
@@ -218,7 +220,7 @@ export function PromptVersionPanel({ promptId, activeVersionId, promptName }: Pr
             <div className="ml-2 flex items-center gap-2">
               <Button
                 type="button"
-                size="xs"
+                size="sm"
                 variant="secondary"
                 disabled={offset <= 0 || isLoading}
                 onClick={() => setOffset(Math.max(0, offset - limit))}
@@ -227,7 +229,7 @@ export function PromptVersionPanel({ promptId, activeVersionId, promptName }: Pr
               </Button>
               <Button
                 type="button"
-                size="xs"
+                size="sm"
                 variant="secondary"
                 disabled={isLoading || (data?.meta ? !data.meta.hasMore : versions.length < limit)}
                 onClick={() => setOffset(offset + limit)}
