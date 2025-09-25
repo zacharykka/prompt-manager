@@ -19,9 +19,6 @@ export function DashboardPage() {
             <Button type="button" onClick={() => navigate('/prompts/new')}>
               新建 Prompt
             </Button>
-            <Button type="button" variant="secondary">
-              导入模板
-            </Button>
           </div>
         </header>
 
