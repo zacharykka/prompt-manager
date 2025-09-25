@@ -14,6 +14,7 @@ import { createPrompt } from '@/features/prompts/api/create-prompt'
 import { createPromptVersion } from '@/features/prompts/api/create-prompt-version'
 import { updatePrompt } from '@/features/prompts/api/update-prompt'
 import { usePromptQuery } from '@/features/prompts/hooks/use-prompt'
+import { PromptVersionPanel } from '@/features/prompts/components/prompt-version-panel'
 import type { Prompt } from '@/features/prompts/types'
 
 const promptEditorSchema = z.object({
@@ -127,6 +128,7 @@ export function PromptEditorPage() {
 
       await queryClient.invalidateQueries({ queryKey: ['prompts'] })
       await queryClient.invalidateQueries({ queryKey: ['prompt', promptId] })
+      await queryClient.invalidateQueries({ queryKey: ['promptVersions', promptId] })
       navigate('/prompts', {
         state: { feedback: { type: 'success', message: `Prompt “${payload.name}” 已更新。` } },
       })
@@ -257,6 +259,14 @@ export function PromptEditorPage() {
           </Button>
         </div>
       </form>
+
+      {mode === 'edit' && promptId ? (
+        <PromptVersionPanel
+          promptId={promptId}
+          activeVersionId={prompt?.activeVersionId ?? null}
+          promptName={prompt?.name}
+        />
+      ) : null}
     </div>
   )
 }
