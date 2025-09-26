@@ -210,7 +210,6 @@ export function LoginForm() {
         popupRef.current = null
         if (!githubHandledRef.current) {
           setIsGitHubLoading(false)
-          setErrorMessage('GitHub 登录已取消')
         }
       }
     }, 500)
