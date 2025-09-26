@@ -184,7 +184,8 @@ func (h *AuthHandler) respondWebMessage(ctx *gin.Context, payload gin.H, redirec
       }
 
       if ('%s') {
-        window.location.replace('%s' + '#pm_oauth=' + encodeURIComponent(encodedPayload));
+        var safeRedirect = '%s'.split('#')[0] || window.location.origin + '/auth/login';
+        window.location.replace(safeRedirect + '#pm_oauth=' + encodeURIComponent(encodedPayload));
       } else {
         document.body.innerText = '登录完成，请返回应用继续操作。';
       }
