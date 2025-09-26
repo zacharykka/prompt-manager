@@ -266,9 +266,6 @@ export function LoginForm() {
   }
 
   useEffect(() => {
-    if (window.name !== POPUP_NAME) {
-      return
-    }
     const hash = window.location.hash
     if (!hash.startsWith(HASH_PREFIX)) {
       return
