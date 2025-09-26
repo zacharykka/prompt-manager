@@ -203,7 +203,7 @@ export function LoginForm() {
     const popup = window.open(
       authorizeURL,
       'prompt-manager-github-login',
-      `width=${width},height=${height},left=${left},top=${top},noreferrer`,
+      `width=${width},height=${height},left=${left},top=${top}`,
     )
 
     if (!popup) {
