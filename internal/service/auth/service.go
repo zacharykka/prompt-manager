@@ -202,7 +202,7 @@ func (s *Service) Refresh(ctx context.Context, refreshToken string) (*Tokens, *d
 }
 
 // GitHubAuthorizeURL 构造 GitHub OAuth 授权地址。
-func (s *Service) GitHubAuthorizeURL(redirectURI string) (string, error) {
+func (s *Service) GitHubAuthorizeURL(redirectURI, responseMode string) (string, error) {
 	if !s.cfg.GitHub.Enabled {
 		return "", ErrOAuthDisabled
 	}
@@ -212,7 +212,9 @@ func (s *Service) GitHubAuthorizeURL(redirectURI string) (string, error) {
 		return "", fmt.Errorf("%w: %v", ErrOAuthStateInvalid, err)
 	}
 
-	state, err := s.generateOAuthState(providerGitHub, finalRedirect)
+	mode := normalizeResponseMode(responseMode)
+
+	state, err := s.generateOAuthState(providerGitHub, finalRedirect, mode)
 	if err != nil {
 		return "", err
 	}
@@ -230,54 +232,54 @@ func (s *Service) GitHubAuthorizeURL(redirectURI string) (string, error) {
 }
 
 // HandleGitHubCallback 处理 GitHub OAuth 回调并返回本地令牌。
-func (s *Service) HandleGitHubCallback(ctx context.Context, code, state string) (*Tokens, *domain.User, string, error) {
+func (s *Service) HandleGitHubCallback(ctx context.Context, code, state string) (*Tokens, *domain.User, string, string, error) {
 	if !s.cfg.GitHub.Enabled {
-		return nil, nil, "", ErrOAuthDisabled
+		return nil, nil, "", "", ErrOAuthDisabled
 	}
 	code = strings.TrimSpace(code)
 	state = strings.TrimSpace(state)
 	if code == "" || state == "" {
-		return nil, nil, "", ErrOAuthStateInvalid
+		return nil, nil, "", "", ErrOAuthStateInvalid
 	}
 
-	provider, finalRedirect, err := s.parseOAuthState(state)
+	provider, finalRedirect, responseMode, err := s.parseOAuthState(state)
 	if err != nil {
-		return nil, nil, "", ErrOAuthStateInvalid
+		return nil, nil, "", "", ErrOAuthStateInvalid
 	}
 	if provider != providerGitHub {
-		return nil, nil, "", ErrOAuthStateInvalid
+		return nil, nil, "", "", ErrOAuthStateInvalid
 	}
 	if finalRedirect != "" {
 		if finalRedirect, err = s.normalizeRedirectURI(finalRedirect); err != nil {
-			return nil, nil, "", fmt.Errorf("%w: %v", ErrOAuthStateInvalid, err)
+			return nil, nil, "", "", fmt.Errorf("%w: %v", ErrOAuthStateInvalid, err)
 		}
 	}
 
 	token, err := s.exchangeGitHubCode(ctx, code, state)
 	if err != nil {
-		return nil, nil, "", err
+		return nil, nil, "", "", err
 	}
 
 	ghUser, err := s.fetchGitHubUser(ctx, token)
 	if err != nil {
-		return nil, nil, "", err
+		return nil, nil, "", "", err
 	}
 
 	email := strings.TrimSpace(ghUser.Email)
 	if email == "" {
 		email, err = s.fetchPrimaryGitHubEmail(ctx, token)
 		if err != nil {
-			return nil, nil, "", err
+			return nil, nil, "", "", err
 		}
 	}
 
 	if err := s.ensureGitHubOrgAccess(ctx, token); err != nil {
-		return nil, nil, "", err
+		return nil, nil, "", "", err
 	}
 
 	providerUserID := ghUser.ID
 	if providerUserID == "" {
-		return nil, nil, "", ErrOAuthExchangeFailed
+		return nil, nil, "", "", ErrOAuthExchangeFailed
 	}
 
 	identity, err := s.repos.UserIdentities.GetByProviderAndExternalID(ctx, providerGitHub, providerUserID)
@@ -285,12 +287,12 @@ func (s *Service) HandleGitHubCallback(ctx context.Context, code, state string) 
 	if err == nil {
 		user, err = s.repos.Users.GetByID(ctx, identity.UserID)
 		if err != nil {
-			return nil, nil, "", err
+			return nil, nil, "", "", err
 		}
 	} else if errors.Is(err, domain.ErrNotFound) {
 		user, err = s.findOrCreateUserByEmail(ctx, email)
 		if err != nil {
-			return nil, nil, "", err
+			return nil, nil, "", "", err
 		}
 
 		login := strings.TrimSpace(ghUser.Login)
@@ -309,26 +311,26 @@ func (s *Service) HandleGitHubCallback(ctx context.Context, code, state string) 
 		}
 
 		if err := s.repos.UserIdentities.Create(ctx, identity); err != nil {
-			return nil, nil, "", err
+			return nil, nil, "", "", err
 		}
 	} else {
-		return nil, nil, "", err
+		return nil, nil, "", "", err
 	}
 
 	if user.Status != "active" {
-		return nil, nil, "", ErrUserDisabled
+		return nil, nil, "", "", ErrUserDisabled
 	}
 
 	if err := s.repos.Users.UpdateLastLogin(ctx, user.ID); err != nil && !errors.Is(err, domain.ErrNotFound) {
-		return nil, nil, "", err
+		return nil, nil, "", "", err
 	}
 
 	tokens, err := s.issueTokens(user)
 	if err != nil {
-		return nil, nil, "", err
+		return nil, nil, "", "", err
 	}
 
-	return tokens, user, finalRedirect, nil
+	return tokens, user, finalRedirect, responseMode, nil
 }
 
 func (s *Service) issueTokens(user *domain.User) (*Tokens, error) {
@@ -383,9 +385,10 @@ func (s *Service) issueTokens(user *domain.User) (*Tokens, error) {
 	return tokens, nil
 }
 
-func (s *Service) generateOAuthState(provider, redirectURI string) (string, error) {
+func (s *Service) generateOAuthState(provider, redirectURI, responseMode string) (string, error) {
 	metadata := map[string]string{
-		"provider": provider,
+		"provider":      provider,
+		"response_mode": responseMode,
 	}
 	if redirectURI != "" {
 		metadata["redirect_uri"] = redirectURI
@@ -407,20 +410,22 @@ func (s *Service) generateOAuthState(provider, redirectURI string) (string, erro
 	return authutil.GenerateToken(s.cfg.AccessTokenSecret, s.cfg.GitHub.StateTTL, claims)
 }
 
-func (s *Service) parseOAuthState(state string) (string, string, error) {
+func (s *Service) parseOAuthState(state string) (string, string, string, error) {
 	claims, err := authutil.ParseToken(state, s.cfg.AccessTokenSecret)
 	if err != nil {
-		return "", "", err
+		return "", "", "", err
 	}
 	if claims.TokenType != tokenTypeOAuthState {
-		return "", "", ErrOAuthStateInvalid
+		return "", "", "", ErrOAuthStateInvalid
 	}
 	provider := strings.TrimSpace(claims.RegisteredClaims.Subject)
 	redirect := ""
+	mode := ""
 	if claims.Metadata != nil {
 		redirect = strings.TrimSpace(claims.Metadata["redirect_uri"])
+		mode = normalizeResponseMode(claims.Metadata["response_mode"])
 	}
-	return provider, redirect, nil
+	return provider, redirect, mode, nil
 }
 
 func (s *Service) normalizeRedirectURI(raw string) (string, error) {
@@ -693,6 +698,15 @@ func normalizedRole(role string) string {
 		return value
 	default:
 		return "viewer"
+	}
+}
+
+func normalizeResponseMode(mode string) string {
+	switch strings.TrimSpace(strings.ToLower(mode)) {
+	case "web_message":
+		return "web_message"
+	default:
+		return "json"
 	}
 }
 

@@ -141,7 +141,7 @@ func TestGitHubAuthorizeURL(t *testing.T) {
 	})
 	defer cleanup()
 
-	authorizeURL, err := svc.GitHubAuthorizeURL("https://app.example.com/finish")
+	authorizeURL, err := svc.GitHubAuthorizeURL("https://app.example.com/finish", "web_message")
 	if err != nil {
 		t.Fatalf("GitHubAuthorizeURL error: %v", err)
 	}
@@ -168,7 +168,7 @@ func TestGitHubAuthorizeURL(t *testing.T) {
 		t.Fatalf("state should not be empty")
 	}
 
-	provider, redirectURI, err := svc.parseOAuthState(state)
+	provider, redirectURI, mode, err := svc.parseOAuthState(state)
 	if err != nil {
 		t.Fatalf("parseOAuthState error: %v", err)
 	}
@@ -177,6 +177,9 @@ func TestGitHubAuthorizeURL(t *testing.T) {
 	}
 	if redirectURI != "https://app.example.com/finish" {
 		t.Fatalf("unexpected redirect uri: %s", redirectURI)
+	}
+	if mode != "web_message" {
+		t.Fatalf("unexpected response mode: %s", mode)
 	}
 }
 
@@ -223,7 +226,7 @@ func TestHandleGitHubCallback_NewUser(t *testing.T) {
 	svc, cleanup := setupAuthTestServiceWithConfig(t, cfg, WithHTTPClient(httpClient), WithGitHubEndpoints(server.URL+"/authorize", server.URL+"/login/oauth/access_token", server.URL))
 	defer cleanup()
 
-	authorizeURL, err := svc.GitHubAuthorizeURL("")
+	authorizeURL, err := svc.GitHubAuthorizeURL("", "")
 	if err != nil {
 		t.Fatalf("GitHubAuthorizeURL error: %v", err)
 	}
@@ -237,7 +240,7 @@ func TestHandleGitHubCallback_NewUser(t *testing.T) {
 		t.Fatalf("state should not be empty")
 	}
 
-	tokens, user, redirectURI, err := svc.HandleGitHubCallback(context.Background(), "dummy-code", state)
+	tokens, user, redirectURI, responseMode, err := svc.HandleGitHubCallback(context.Background(), "dummy-code", state)
 	if err != nil {
 		t.Fatalf("HandleGitHubCallback error: %v", err)
 	}
@@ -246,6 +249,9 @@ func TestHandleGitHubCallback_NewUser(t *testing.T) {
 	}
 	if redirectURI != "" {
 		t.Fatalf("unexpected redirect uri: %s", redirectURI)
+	}
+	if responseMode != "json" {
+		t.Fatalf("unexpected response mode: %s", responseMode)
 	}
 	if user.Email != "octocat@example.com" {
 		t.Fatalf("unexpected user email: %s", user.Email)
@@ -302,7 +308,7 @@ func TestHandleGitHubCallback_OrgRestriction(t *testing.T) {
 	svc, cleanup := setupAuthTestServiceWithConfig(t, cfg, WithHTTPClient(httpClient), WithGitHubEndpoints(server.URL+"/authorize", server.URL+"/login/oauth/access_token", server.URL))
 	defer cleanup()
 
-	authorizeURL, err := svc.GitHubAuthorizeURL("")
+	authorizeURL, err := svc.GitHubAuthorizeURL("", "")
 	if err != nil {
 		t.Fatalf("GitHubAuthorizeURL error: %v", err)
 	}
@@ -316,7 +322,7 @@ func TestHandleGitHubCallback_OrgRestriction(t *testing.T) {
 		t.Fatalf("state should not be empty")
 	}
 
-	_, _, _, err = svc.HandleGitHubCallback(context.Background(), "dummy-code", state)
+	_, _, _, _, err = svc.HandleGitHubCallback(context.Background(), "dummy-code", state)
 	if !errors.Is(err, ErrOAuthOrgUnauthorized) {
 		t.Fatalf("expected ErrOAuthOrgUnauthorized got %v", err)
 	}

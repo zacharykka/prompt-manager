@@ -135,7 +135,8 @@
 2. **Scopes 选择**：首版仅需 `read:user` 与 `user:email`，用于读取基础资料与邮箱；如需团队/组织信息，可追加 `read:org`。
 3. **后端流程约定**：
    - `GET /api/v1/auth/github/login`：根据配置生成 `state` 并 302 到 GitHub 授权页，可选携带 `redirect_uri` 作为登录完成后的回跳地址。
-   - GitHub 成功授权后回调 `GET /api/v1/auth/github/callback?code=...&state=...`，后端会校验 `state`、交换 Access Token，并返回 JSON 结构 `{ "tokens": {...}, "user": {...}, "redirect_uri": "..." }`。
+   - 若请求参数包含 `response_mode=web_message`，回调时会返回带有 `postMessage` 的 HTML，向前端窗口发送 `{ source: 'prompt-manager', payload: { tokens, user, redirect_uri } }`，便于前端弹窗场景处理；未指定则默认返回 JSON。
+   - GitHub 成功授权后回调 `GET /api/v1/auth/github/callback?code=...&state=...`，后端会校验 `state`、交换 Access Token，并返回 JSON 结构 `{ "tokens": {...}, "user": {...}, "redirect_uri": "..." }`（或在 `web_message` 模式下通过 `postMessage` 推送）。
    - 若邮箱对应的本地账号不存在，会自动创建 `viewer` 角色的新用户并绑定 `user_identities` 映射；存在则完成绑定并更新最后登录时间。
 4. **安全建议**：
    - `state` 由后端使用 JWT 签名并设置有效期，无需额外存储；若需更严的幂等控制，可结合 Redis 记录已消费的 state。

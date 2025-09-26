@@ -1,7 +1,11 @@
 package http
 
 import (
+	"encoding/base64"
+	"encoding/json"
+	"fmt"
 	"net/http"
+	"net/url"
 
 	"github.com/gin-gonic/gin"
 	authsvc "github.com/zacharykka/prompt-manager/internal/service/auth"
@@ -101,7 +105,10 @@ func (h *AuthHandler) Refresh(ctx *gin.Context) {
 
 // GitHubLogin 引导用户跳转至 GitHub 授权页。
 func (h *AuthHandler) GitHubLogin(ctx *gin.Context) {
-	authorizeURL, err := h.service.GitHubAuthorizeURL(ctx.Query("redirect_uri"))
+	authorizeURL, err := h.service.GitHubAuthorizeURL(
+		ctx.Query("redirect_uri"),
+		ctx.Query("response_mode"),
+	)
 	if err != nil {
 		h.handleError(ctx, err)
 		return
@@ -111,7 +118,11 @@ func (h *AuthHandler) GitHubLogin(ctx *gin.Context) {
 
 // GitHubCallback 处理 GitHub OAuth 回调并返回本地令牌。
 func (h *AuthHandler) GitHubCallback(ctx *gin.Context) {
-	tokens, user, redirectURI, err := h.service.HandleGitHubCallback(ctx.Request.Context(), ctx.Query("code"), ctx.Query("state"))
+	tokens, user, redirectURI, responseMode, err := h.service.HandleGitHubCallback(
+		ctx.Request.Context(),
+		ctx.Query("code"),
+		ctx.Query("state"),
+	)
 	if err != nil {
 		h.handleError(ctx, err)
 		return
@@ -125,7 +136,55 @@ func (h *AuthHandler) GitHubCallback(ctx *gin.Context) {
 		payload["redirect_uri"] = redirectURI
 	}
 
+	if responseMode == "web_message" {
+		h.respondWebMessage(ctx, payload, redirectURI)
+		return
+	}
+
 	httpx.RespondOK(ctx, payload)
+}
+
+func (h *AuthHandler) respondWebMessage(ctx *gin.Context, payload gin.H, redirectURI string) {
+	jsonBytes, err := json.Marshal(payload)
+	if err != nil {
+		h.handleError(ctx, fmt.Errorf("marshal web message payload: %w", err))
+		return
+	}
+
+	encoded := base64.StdEncoding.EncodeToString(jsonBytes)
+	targetOrigin := "*"
+	if redirectURI != "" {
+		if parsed, err := url.Parse(redirectURI); err == nil && parsed.Scheme != "" && parsed.Host != "" {
+			targetOrigin = fmt.Sprintf("%s://%s", parsed.Scheme, parsed.Host)
+		}
+	}
+
+	html := fmt.Sprintf(`<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <title>GitHub 登录完成</title>
+</head>
+<body>
+  <script>
+    (function () {
+      const data = JSON.parse(atob('%s'));
+      if (window.opener) {
+        try {
+          window.opener.postMessage({ source: 'prompt-manager', payload: data }, '%s');
+        } catch (error) {
+          console.error('postMessage failed', error);
+        }
+        window.close();
+      } else {
+        document.body.innerText = '登录完成，请返回应用继续操作。';
+      }
+    })();
+  </script>
+</body>
+</html>`, encoded, targetOrigin)
+
+	ctx.Data(http.StatusOK, "text/html; charset=utf-8", []byte(html))
 }
 
 func (h *AuthHandler) handleError(ctx *gin.Context, err error) {

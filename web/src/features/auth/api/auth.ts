@@ -3,14 +3,14 @@ import axios from 'axios'
 import type { LoginResponse, Tokens, User } from '@/features/auth/types'
 import { env } from '@/libs/config/env'
 
-interface RawTokens {
+export interface RawTokens {
   access_token: string
   access_token_expires_at: string
   refresh_token: string
   refresh_token_expires_at: string
 }
 
-interface RawUser {
+export interface RawUser {
   id: string
   email: string
   role: string
@@ -20,7 +20,7 @@ interface RawUser {
   updated_at: string
 }
 
-interface RawLoginResponse {
+export interface RawLoginResponse {
   tokens: RawTokens
   user: RawUser
 }
@@ -47,7 +47,7 @@ export async function login(payload: LoginPayload): Promise<LoginResponse> {
     '/auth/login',
     payload,
   )
-  return mapLoginResponse(response.data.data)
+  return mapLoginResponseFromRaw(response.data.data)
 }
 
 export async function refreshTokens(refreshToken: string): Promise<LoginResponse> {
@@ -55,7 +55,7 @@ export async function refreshTokens(refreshToken: string): Promise<LoginResponse
     '/auth/refresh',
     { refresh_token: refreshToken },
   )
-  return mapLoginResponse(response.data.data)
+  return mapLoginResponseFromRaw(response.data.data)
 }
 
 function mapTokens(raw: RawTokens): Tokens {
@@ -79,7 +79,7 @@ function mapUser(raw: RawUser): User {
   }
 }
 
-function mapLoginResponse(raw: RawLoginResponse): LoginResponse {
+export function mapLoginResponseFromRaw(raw: RawLoginResponse): LoginResponse {
   return {
     tokens: mapTokens(raw.tokens),
     user: mapUser(raw.user),
