@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	authsvc "github.com/zacharykka/prompt-manager/internal/service/auth"
@@ -108,6 +109,7 @@ func (h *AuthHandler) GitHubLogin(ctx *gin.Context) {
 	authorizeURL, err := h.service.GitHubAuthorizeURL(
 		ctx.Query("redirect_uri"),
 		ctx.Query("response_mode"),
+		ctx.Query("client_origin"),
 	)
 	if err != nil {
 		h.handleError(ctx, err)
@@ -118,7 +120,7 @@ func (h *AuthHandler) GitHubLogin(ctx *gin.Context) {
 
 // GitHubCallback 处理 GitHub OAuth 回调并返回本地令牌。
 func (h *AuthHandler) GitHubCallback(ctx *gin.Context) {
-	tokens, user, redirectURI, responseMode, err := h.service.HandleGitHubCallback(
+	tokens, user, redirectURI, responseMode, clientOrigin, err := h.service.HandleGitHubCallback(
 		ctx.Request.Context(),
 		ctx.Query("code"),
 		ctx.Query("state"),
@@ -137,14 +139,14 @@ func (h *AuthHandler) GitHubCallback(ctx *gin.Context) {
 	}
 
 	if responseMode == "web_message" {
-		h.respondWebMessage(ctx, payload, redirectURI)
+		h.respondWebMessage(ctx, payload, redirectURI, clientOrigin)
 		return
 	}
 
 	httpx.RespondOK(ctx, payload)
 }
 
-func (h *AuthHandler) respondWebMessage(ctx *gin.Context, payload gin.H, redirectURI string) {
+func (h *AuthHandler) respondWebMessage(ctx *gin.Context, payload gin.H, redirectURI, clientOrigin string) {
 	jsonBytes, err := json.Marshal(payload)
 	if err != nil {
 		h.handleError(ctx, fmt.Errorf("marshal web message payload: %w", err))
@@ -157,7 +159,12 @@ func (h *AuthHandler) respondWebMessage(ctx *gin.Context, payload gin.H, redirec
 		if parsed, err := url.Parse(redirectURI); err == nil && parsed.Scheme != "" && parsed.Host != "" {
 			targetOrigin = fmt.Sprintf("%s://%s", parsed.Scheme, parsed.Host)
 		}
+	} else if strings.TrimSpace(clientOrigin) != "" {
+		targetOrigin = clientOrigin
 	}
+
+	safeRedirect := strings.TrimSpace(redirectURI)
+	fallbackRedirect := strings.TrimSpace(clientOrigin)
 
 	html := fmt.Sprintf(`<!DOCTYPE html>
 <html lang="zh-CN">
@@ -184,15 +191,23 @@ func (h *AuthHandler) respondWebMessage(ctx *gin.Context, payload gin.H, redirec
       }
 
       if ('%s') {
-        var safeRedirect = '%s'.split('#')[0] || window.location.origin + '/auth/login';
-        window.location.replace(safeRedirect + '#pm_oauth=' + encodeURIComponent(encodedPayload));
+        var redirectTarget = '%s'.split('#')[0];
+        if (redirectTarget) {
+          window.location.replace(redirectTarget + '#pm_oauth=' + encodeURIComponent(encodedPayload));
+          return;
+        }
+      }
+
+      if ('%s') {
+        var fallbackTarget = '%s'.replace(/\/$/, '') + '/auth/login';
+        window.location.replace(fallbackTarget + '#pm_oauth=' + encodeURIComponent(encodedPayload));
       } else {
         document.body.innerText = '登录完成，请返回应用继续操作。';
       }
     })();
   </script>
 </body>
-</html>`, encoded, targetOrigin, redirectURI, redirectURI)
+</html>`, encoded, targetOrigin, safeRedirect, safeRedirect, fallbackRedirect, fallbackRedirect)
 
 	ctx.Data(http.StatusOK, "text/html; charset=utf-8", []byte(html))
 }

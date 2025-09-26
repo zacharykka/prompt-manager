@@ -202,7 +202,7 @@ func (s *Service) Refresh(ctx context.Context, refreshToken string) (*Tokens, *d
 }
 
 // GitHubAuthorizeURL 构造 GitHub OAuth 授权地址。
-func (s *Service) GitHubAuthorizeURL(redirectURI, responseMode string) (string, error) {
+func (s *Service) GitHubAuthorizeURL(redirectURI, responseMode, clientOrigin string) (string, error) {
 	if !s.cfg.GitHub.Enabled {
 		return "", ErrOAuthDisabled
 	}
@@ -214,7 +214,7 @@ func (s *Service) GitHubAuthorizeURL(redirectURI, responseMode string) (string, 
 
 	mode := normalizeResponseMode(responseMode)
 
-	state, err := s.generateOAuthState(providerGitHub, finalRedirect, mode)
+	state, err := s.generateOAuthState(providerGitHub, finalRedirect, mode, clientOrigin)
 	if err != nil {
 		return "", err
 	}
@@ -232,54 +232,59 @@ func (s *Service) GitHubAuthorizeURL(redirectURI, responseMode string) (string, 
 }
 
 // HandleGitHubCallback 处理 GitHub OAuth 回调并返回本地令牌。
-func (s *Service) HandleGitHubCallback(ctx context.Context, code, state string) (*Tokens, *domain.User, string, string, error) {
+func (s *Service) HandleGitHubCallback(ctx context.Context, code, state string) (*Tokens, *domain.User, string, string, string, error) {
 	if !s.cfg.GitHub.Enabled {
-		return nil, nil, "", "", ErrOAuthDisabled
+		return nil, nil, "", "", "", ErrOAuthDisabled
 	}
 	code = strings.TrimSpace(code)
 	state = strings.TrimSpace(state)
 	if code == "" || state == "" {
-		return nil, nil, "", "", ErrOAuthStateInvalid
+		return nil, nil, "", "", "", ErrOAuthStateInvalid
 	}
 
-	provider, finalRedirect, responseMode, err := s.parseOAuthState(state)
+	provider, finalRedirect, responseMode, clientOrigin, err := s.parseOAuthState(state)
 	if err != nil {
-		return nil, nil, "", "", ErrOAuthStateInvalid
+		return nil, nil, "", "", "", ErrOAuthStateInvalid
 	}
 	if provider != providerGitHub {
-		return nil, nil, "", "", ErrOAuthStateInvalid
+		return nil, nil, "", "", "", ErrOAuthStateInvalid
 	}
 	if finalRedirect != "" {
 		if finalRedirect, err = s.normalizeRedirectURI(finalRedirect); err != nil {
-			return nil, nil, "", "", fmt.Errorf("%w: %v", ErrOAuthStateInvalid, err)
+			return nil, nil, "", "", "", fmt.Errorf("%w: %v", ErrOAuthStateInvalid, err)
+		}
+	}
+	if clientOrigin == "" && finalRedirect != "" {
+		if parsed, err := url.Parse(finalRedirect); err == nil && parsed.Scheme != "" && parsed.Host != "" {
+			clientOrigin = fmt.Sprintf("%s://%s", parsed.Scheme, parsed.Host)
 		}
 	}
 
 	token, err := s.exchangeGitHubCode(ctx, code, state)
 	if err != nil {
-		return nil, nil, "", "", err
+		return nil, nil, "", "", "", err
 	}
 
 	ghUser, err := s.fetchGitHubUser(ctx, token)
 	if err != nil {
-		return nil, nil, "", "", err
+		return nil, nil, "", "", "", err
 	}
 
 	email := strings.TrimSpace(ghUser.Email)
 	if email == "" {
 		email, err = s.fetchPrimaryGitHubEmail(ctx, token)
 		if err != nil {
-			return nil, nil, "", "", err
+			return nil, nil, "", "", "", err
 		}
 	}
 
 	if err := s.ensureGitHubOrgAccess(ctx, token); err != nil {
-		return nil, nil, "", "", err
+		return nil, nil, "", "", "", err
 	}
 
 	providerUserID := ghUser.ID
 	if providerUserID == "" {
-		return nil, nil, "", "", ErrOAuthExchangeFailed
+		return nil, nil, "", "", "", ErrOAuthExchangeFailed
 	}
 
 	identity, err := s.repos.UserIdentities.GetByProviderAndExternalID(ctx, providerGitHub, providerUserID)
@@ -287,12 +292,12 @@ func (s *Service) HandleGitHubCallback(ctx context.Context, code, state string) 
 	if err == nil {
 		user, err = s.repos.Users.GetByID(ctx, identity.UserID)
 		if err != nil {
-			return nil, nil, "", "", err
+			return nil, nil, "", "", "", err
 		}
 	} else if errors.Is(err, domain.ErrNotFound) {
 		user, err = s.findOrCreateUserByEmail(ctx, email)
 		if err != nil {
-			return nil, nil, "", "", err
+			return nil, nil, "", "", "", err
 		}
 
 		login := strings.TrimSpace(ghUser.Login)
@@ -311,26 +316,26 @@ func (s *Service) HandleGitHubCallback(ctx context.Context, code, state string) 
 		}
 
 		if err := s.repos.UserIdentities.Create(ctx, identity); err != nil {
-			return nil, nil, "", "", err
+			return nil, nil, "", "", "", err
 		}
 	} else {
-		return nil, nil, "", "", err
+		return nil, nil, "", "", "", err
 	}
 
 	if user.Status != "active" {
-		return nil, nil, "", "", ErrUserDisabled
+		return nil, nil, "", "", "", ErrUserDisabled
 	}
 
 	if err := s.repos.Users.UpdateLastLogin(ctx, user.ID); err != nil && !errors.Is(err, domain.ErrNotFound) {
-		return nil, nil, "", "", err
+		return nil, nil, "", "", "", err
 	}
 
 	tokens, err := s.issueTokens(user)
 	if err != nil {
-		return nil, nil, "", "", err
+		return nil, nil, "", "", "", err
 	}
 
-	return tokens, user, finalRedirect, responseMode, nil
+	return tokens, user, finalRedirect, responseMode, clientOrigin, nil
 }
 
 func (s *Service) issueTokens(user *domain.User) (*Tokens, error) {
@@ -385,10 +390,13 @@ func (s *Service) issueTokens(user *domain.User) (*Tokens, error) {
 	return tokens, nil
 }
 
-func (s *Service) generateOAuthState(provider, redirectURI, responseMode string) (string, error) {
+func (s *Service) generateOAuthState(provider, redirectURI, responseMode, clientOrigin string) (string, error) {
 	metadata := map[string]string{
 		"provider":      provider,
 		"response_mode": responseMode,
+	}
+	if strings.TrimSpace(clientOrigin) != "" {
+		metadata["client_origin"] = strings.TrimSpace(clientOrigin)
 	}
 	if redirectURI != "" {
 		metadata["redirect_uri"] = redirectURI
@@ -410,22 +418,24 @@ func (s *Service) generateOAuthState(provider, redirectURI, responseMode string)
 	return authutil.GenerateToken(s.cfg.AccessTokenSecret, s.cfg.GitHub.StateTTL, claims)
 }
 
-func (s *Service) parseOAuthState(state string) (string, string, string, error) {
+func (s *Service) parseOAuthState(state string) (string, string, string, string, error) {
 	claims, err := authutil.ParseToken(state, s.cfg.AccessTokenSecret)
 	if err != nil {
-		return "", "", "", err
+		return "", "", "", "", err
 	}
 	if claims.TokenType != tokenTypeOAuthState {
-		return "", "", "", ErrOAuthStateInvalid
+		return "", "", "", "", ErrOAuthStateInvalid
 	}
 	provider := strings.TrimSpace(claims.RegisteredClaims.Subject)
 	redirect := ""
 	mode := ""
+	origin := ""
 	if claims.Metadata != nil {
 		redirect = strings.TrimSpace(claims.Metadata["redirect_uri"])
 		mode = normalizeResponseMode(claims.Metadata["response_mode"])
+		origin = strings.TrimSpace(claims.Metadata["client_origin"])
 	}
-	return provider, redirect, mode, nil
+	return provider, redirect, mode, origin, nil
 }
 
 func (s *Service) normalizeRedirectURI(raw string) (string, error) {

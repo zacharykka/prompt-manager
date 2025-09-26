@@ -230,7 +230,7 @@ export function LoginForm() {
 
     const redirectURL = new URL(fallbackRedirect, window.location.origin).toString()
     const baseUrl = env.apiBaseUrl.replace(/\/$/, '')
-    const authorizeURL = `${baseUrl}/auth/github/login?response_mode=web_message&redirect_uri=${encodeURIComponent(redirectURL)}`
+    const authorizeURL = `${baseUrl}/auth/github/login?response_mode=web_message&redirect_uri=${encodeURIComponent(redirectURL)}&client_origin=${encodeURIComponent(window.location.origin)}`
 
     if (popupRef.current && !popupRef.current.closed) {
       popupRef.current.close()
