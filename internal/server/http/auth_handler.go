@@ -175,7 +175,10 @@ func (h *AuthHandler) respondWebMessage(ctx *gin.Context, payload gin.H, redirec
         } catch (error) {
           console.error('postMessage failed', error);
         }
-        window.close();
+        document.body.innerText = '登录成功，窗口即将关闭...';
+        setTimeout(function () {
+          window.close();
+        }, 600);
       } else {
         document.body.innerText = '登录完成，请返回应用继续操作。';
       }
