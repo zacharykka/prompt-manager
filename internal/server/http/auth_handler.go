@@ -168,24 +168,30 @@ func (h *AuthHandler) respondWebMessage(ctx *gin.Context, payload gin.H, redirec
 <body>
   <script>
     (function () {
-      const data = JSON.parse(atob('%s'));
+      const encodedPayload = '%s';
+      const data = JSON.parse(atob(encodedPayload));
       if (window.opener) {
         try {
           window.opener.postMessage({ source: 'prompt-manager', payload: data }, '%s');
+          document.body.innerText = '登录成功，窗口即将关闭...';
+          setTimeout(function () {
+            window.close();
+          }, 600);
+          return;
         } catch (error) {
           console.error('postMessage failed', error);
         }
-        document.body.innerText = '登录成功，窗口即将关闭...';
-        setTimeout(function () {
-          window.close();
-        }, 600);
+      }
+
+      if ('%s') {
+        window.location.replace('%s' + '#pm_oauth=' + encodeURIComponent(encodedPayload));
       } else {
         document.body.innerText = '登录完成，请返回应用继续操作。';
       }
     })();
   </script>
 </body>
-</html>`, encoded, targetOrigin)
+</html>`, encoded, targetOrigin, redirectURI, redirectURI)
 
 	ctx.Data(http.StatusOK, "text/html; charset=utf-8", []byte(html))
 }

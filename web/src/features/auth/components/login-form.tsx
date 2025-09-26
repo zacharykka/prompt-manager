@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -23,6 +23,10 @@ interface GitHubOAuthMessage {
   error?: string
 }
 
+const STORAGE_KEY = 'prompt-manager:oauth-result'
+const POPUP_NAME = 'prompt-manager-github-login'
+const HASH_PREFIX = '#pm_oauth='
+
 const loginSchema = z.object({
   email: z
     .string()
@@ -46,7 +50,48 @@ export function LoginForm() {
   const popupRef = useRef<Window | null>(null)
   const closeWatcherRef = useRef<number | null>(null)
   const desiredRedirectRef = useRef<string>('/prompts')
+  const githubHandledRef = useRef(false)
   const apiOrigin = useMemo(() => new URL(env.apiBaseUrl).origin, [])
+
+  const cleanupPopup = useCallback(() => {
+    if (closeWatcherRef.current !== null) {
+      window.clearInterval(closeWatcherRef.current)
+      closeWatcherRef.current = null
+    }
+    if (popupRef.current && !popupRef.current.closed) {
+      popupRef.current.close()
+    }
+    popupRef.current = null
+  }, [])
+
+  const applyAuthResult = useCallback(
+    (raw: RawLoginResponse, redirectFromPayload?: string | null) => {
+      githubHandledRef.current = true
+      cleanupPopup()
+      setIsGitHubLoading(false)
+      setErrorMessage(null)
+
+      const mapped = mapLoginResponseFromRaw(raw)
+      setAuth(mapped)
+
+      const redirectOverride = redirectFromPayload ?? undefined
+      let target = desiredRedirectRef.current
+      if (redirectOverride) {
+        try {
+          const parsed = new URL(redirectOverride)
+          const combined = `${parsed.pathname}${parsed.search}${parsed.hash}`
+          if (combined && combined !== '/') {
+            target = combined
+          }
+        } catch (error) {
+          console.warn('invalid redirect_uri from OAuth payload', error)
+        }
+      }
+
+      navigate(target, { replace: true })
+    },
+    [cleanupPopup, navigate, setAuth],
+  )
 
   const {
     register,
@@ -88,25 +133,19 @@ export function LoginForm() {
         return
       }
 
-      if (closeWatcherRef.current !== null) {
-        window.clearInterval(closeWatcherRef.current)
-        closeWatcherRef.current = null
-      }
-
-      if (popupRef.current && !popupRef.current.closed) {
-        popupRef.current.close()
-      }
-      popupRef.current = null
-
       if (data.error) {
-        setErrorMessage(data.error)
+        githubHandledRef.current = true
+        cleanupPopup()
         setIsGitHubLoading(false)
+        setErrorMessage(data.error)
         return
       }
 
       if (!data.payload) {
-        setErrorMessage('GitHub 登录失败，请稍后重试')
+        githubHandledRef.current = true
+        cleanupPopup()
         setIsGitHubLoading(false)
+        setErrorMessage('GitHub 登录失败，请稍后重试')
         return
       }
 
@@ -115,30 +154,13 @@ export function LoginForm() {
           tokens: data.payload.tokens,
           user: data.payload.user,
         }
-        const mapped = mapLoginResponseFromRaw(raw)
-        setAuth(mapped)
-
-        const redirectFromPayload = data.payload.redirect_uri
-        let target = desiredRedirectRef.current
-        if (redirectFromPayload) {
-          try {
-            const parsed = new URL(redirectFromPayload)
-            const combined = `${parsed.pathname}${parsed.search}${parsed.hash}`
-            if (combined && combined !== '/') {
-              target = combined
-            }
-          } catch (error) {
-            console.warn('invalid redirect_uri from OAuth payload', error)
-          }
-        }
-
-        setErrorMessage(null)
-        navigate(target, { replace: true })
+        applyAuthResult(raw, data.payload.redirect_uri ?? null)
       } catch (error) {
+        githubHandledRef.current = true
+        cleanupPopup()
+        setIsGitHubLoading(false)
         console.error('failed to process GitHub OAuth payload', error)
         setErrorMessage('GitHub 登录响应解析失败，请稍后重试')
-      } finally {
-        setIsGitHubLoading(false)
       }
     }
 
@@ -146,7 +168,32 @@ export function LoginForm() {
     return () => {
       window.removeEventListener('message', handleMessage)
     }
-  }, [apiOrigin, navigate, setAuth])
+  }, [apiOrigin, applyAuthResult, cleanupPopup])
+
+  useEffect(() => {
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key !== STORAGE_KEY || !event.newValue) {
+        return
+      }
+      try {
+        const decoded = JSON.parse(atob(event.newValue)) as RawLoginResponse & { redirect_uri?: string | null }
+        applyAuthResult({ tokens: decoded.tokens, user: decoded.user }, decoded.redirect_uri ?? null)
+      } catch (error) {
+        console.error('failed to process OAuth storage payload', error)
+        setErrorMessage('GitHub 登录响应解析失败，请稍后重试')
+        githubHandledRef.current = true
+        cleanupPopup()
+        setIsGitHubLoading(false)
+      } finally {
+        window.localStorage.removeItem(STORAGE_KEY)
+      }
+    }
+
+    window.addEventListener('storage', handleStorage)
+    return () => {
+      window.removeEventListener('storage', handleStorage)
+    }
+  }, [applyAuthResult, cleanupPopup])
 
   useEffect(() => {
     if (!isGitHubLoading || !popupRef.current) {
@@ -161,8 +208,10 @@ export function LoginForm() {
         window.clearInterval(timer)
         closeWatcherRef.current = null
         popupRef.current = null
-        setIsGitHubLoading(false)
-        setErrorMessage((previous) => previous ?? 'GitHub 登录已取消')
+        if (!githubHandledRef.current) {
+          setIsGitHubLoading(false)
+          setErrorMessage('GitHub 登录已取消')
+        }
       }
     }, 500)
 
@@ -178,6 +227,7 @@ export function LoginForm() {
     setErrorMessage(null)
     const fallbackRedirect = (location.state as { from?: string } | null)?.from ?? '/prompts'
     desiredRedirectRef.current = fallbackRedirect
+    githubHandledRef.current = false
 
     const redirectURL = new URL(fallbackRedirect, window.location.origin).toString()
     const baseUrl = env.apiBaseUrl.replace(/\/$/, '')
@@ -202,7 +252,7 @@ export function LoginForm() {
 
     const popup = window.open(
       authorizeURL,
-      'prompt-manager-github-login',
+      POPUP_NAME,
       `width=${width},height=${height},left=${left},top=${top},noopener=no`,
     )
 
@@ -215,6 +265,29 @@ export function LoginForm() {
     popup.focus()
     popupRef.current = popup
   }
+
+  useEffect(() => {
+    if (window.name !== POPUP_NAME) {
+      return
+    }
+    const hash = window.location.hash
+    if (!hash.startsWith(HASH_PREFIX)) {
+      return
+    }
+
+    const encoded = decodeURIComponent(hash.slice(HASH_PREFIX.length))
+
+    try {
+      window.localStorage.setItem(STORAGE_KEY, encoded)
+    } catch (error) {
+      console.error('failed to persist OAuth payload via storage', error)
+    } finally {
+      window.location.hash = ''
+      setTimeout(() => {
+        window.close()
+      }, 100)
+    }
+  }, [])
 
   return (
     <form className="space-y-4" onSubmit={handleSubmit(onSubmit)}>
