@@ -154,16 +154,17 @@ func (h *AuthHandler) respondWebMessage(ctx *gin.Context, payload gin.H, redirec
 	}
 
 	encoded := base64.StdEncoding.EncodeToString(jsonBytes)
+
+	// Use clientOrigin as the target origin for postMessage
 	targetOrigin := "*"
-	if redirectURI != "" {
+	if strings.TrimSpace(clientOrigin) != "" {
+		targetOrigin = clientOrigin
+	} else if redirectURI != "" {
 		if parsed, err := url.Parse(redirectURI); err == nil && parsed.Scheme != "" && parsed.Host != "" {
 			targetOrigin = fmt.Sprintf("%s://%s", parsed.Scheme, parsed.Host)
 		}
-	} else if strings.TrimSpace(clientOrigin) != "" {
-		targetOrigin = clientOrigin
 	}
 
-	safeRedirect := strings.TrimSpace(redirectURI)
 	fallbackRedirect := strings.TrimSpace(clientOrigin)
 
 	html := fmt.Sprintf(`<!DOCTYPE html>
@@ -176,38 +177,59 @@ func (h *AuthHandler) respondWebMessage(ctx *gin.Context, payload gin.H, redirec
   <script>
     (function () {
       const encodedPayload = '%s';
-      const data = JSON.parse(atob(encodedPayload));
-      if (window.opener) {
-        try {
-          window.opener.postMessage({ source: 'prompt-manager', payload: data }, '%s');
-          document.body.innerText = '登录成功，窗口即将关闭...';
-          setTimeout(function () {
-            window.close();
-          }, 600);
-          return;
-        } catch (error) {
-          console.error('postMessage failed', error);
-        }
-      }
+      console.log('OAuth callback received, payload length:', encodedPayload.length);
 
-      if ('%s') {
-        var redirectTarget = '%s'.split('#')[0];
-        if (redirectTarget) {
-          window.location.replace(redirectTarget + '#pm_oauth=' + encodeURIComponent(encodedPayload));
-          return;
-        }
-      }
+      try {
+        const data = JSON.parse(atob(encodedPayload));
+        console.log('OAuth payload decoded:', { user: data.user?.email, hasTokens: !!data.tokens });
 
-      if ('%s') {
-        var fallbackTarget = '%s'.replace(/\/$/, '') + '/auth/login';
-        window.location.replace(fallbackTarget + '#pm_oauth=' + encodeURIComponent(encodedPayload));
-      } else {
-        document.body.innerText = '登录完成，请返回应用继续操作。';
+        console.log('Window opener status:', {
+          hasOpener: !!window.opener,
+          openerClosed: window.opener ? window.opener.closed : 'no opener',
+          windowName: window.name
+        });
+
+        if (window.opener && !window.opener.closed) {
+          try {
+            console.log('Attempting postMessage to opener:', '%s');
+            window.opener.postMessage({ source: 'prompt-manager', payload: data }, '%s');
+            document.body.innerText = '登录成功，正在返回主窗口...';
+            console.log('Posted message to opener window successfully');
+            setTimeout(function () {
+              window.close();
+            }, 1000);
+            return;
+          } catch (error) {
+            console.error('postMessage failed:', error);
+            console.log('postMessage failed, trying localStorage fallback');
+          }
+        } else {
+          console.log('No valid opener window found (opener:', !!window.opener, ', closed:', window.opener ? window.opener.closed : 'no opener', '), using localStorage fallback');
+        }
+
+        // Force hash redirect for cross-origin scenarios
+        console.log('Using hash redirect fallback');
+
+        var clientOrigin = '%s';
+        if (clientOrigin && clientOrigin !== '') {
+          console.log('Redirecting to client with hash, clientOrigin:', clientOrigin);
+          var fallbackTarget = clientOrigin + '/auth/login';
+          var redirectURL = fallbackTarget + '#pm_oauth=' + encodeURIComponent(encodedPayload);
+          console.log('Final redirect URL:', redirectURL);
+          document.body.innerText = '正在返回主窗口...';
+          window.location.replace(redirectURL);
+        } else {
+          console.error('No client origin available for redirect');
+          document.body.innerText = '登录完成，请手动返回应用。';
+        }
+      } catch (error) {
+        console.error('Failed to process OAuth callback:', error);
+        document.body.innerText = '登录处理失败，请返回应用重试。';
       }
     })();
   </script>
 </body>
-</html>`, encoded, targetOrigin, safeRedirect, safeRedirect, fallbackRedirect, fallbackRedirect)
+</html>`, encoded, targetOrigin, targetOrigin, fallbackRedirect)
 
 	ctx.Data(http.StatusOK, "text/html; charset=utf-8", []byte(html))
 }

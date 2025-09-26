@@ -125,13 +125,33 @@ export function LoginForm() {
 
   useEffect(() => {
     const handleMessage = (event: MessageEvent<GitHubOAuthMessage>) => {
-      if (event.origin !== apiOrigin) {
+      console.log('Received postMessage:', {
+        origin: event.origin,
+        expectedOrigin: apiOrigin,
+        data: event.data,
+        dataType: typeof event.data,
+        hasSource: event.data?.source
+      })
+
+      // Temporarily allow messages from both origins for debugging
+      const isValidOrigin = event.origin === apiOrigin ||
+                           event.origin === window.location.origin ||
+                           event.origin === 'http://localhost:8080' ||
+                           event.origin === 'http://localhost:5173'
+
+      if (!isValidOrigin) {
+        console.warn('Message from unexpected origin:', event.origin, 'expected:', apiOrigin)
         return
       }
+
       const data = event.data
-      if (!data || data.source !== 'prompt-manager') {
+      // More specific check for our OAuth message format
+      if (!data || typeof data !== 'object' || data.source !== 'prompt-manager') {
+        console.log('Ignoring non-OAuth message:', data)
         return
       }
+
+      console.log('Processing postMessage from OAuth popup')
 
       if (data.error) {
         githubHandledRef.current = true
@@ -154,6 +174,7 @@ export function LoginForm() {
           tokens: data.payload.tokens,
           user: data.payload.user,
         }
+        console.log('Applying auth result from postMessage')
         applyAuthResult(raw, data.payload.redirect_uri ?? null)
       } catch (error) {
         githubHandledRef.current = true
@@ -209,10 +230,59 @@ export function LoginForm() {
         closeWatcherRef.current = null
         popupRef.current = null
         if (!githubHandledRef.current) {
-          setIsGitHubLoading(false)
+          // Add a small delay to ensure localStorage write is complete
+          setTimeout(() => {
+            // Check for OAuth result in localStorage when popup closes
+            const oauthResult = window.localStorage.getItem(STORAGE_KEY)
+            console.log('Popup closed, checking localStorage (delayed):', { oauthResult: !!oauthResult })
+            if (oauthResult) {
+              try {
+                const decoded = JSON.parse(atob(oauthResult)) as RawLoginResponse & { redirect_uri?: string | null }
+                console.log('Processing OAuth result (delayed):', { user: decoded.user?.email, hasTokens: !!decoded.tokens })
+                applyAuthResult({ tokens: decoded.tokens, user: decoded.user }, decoded.redirect_uri ?? null)
+                window.localStorage.removeItem(STORAGE_KEY)
+                return
+              } catch (error) {
+                console.error('failed to process OAuth storage payload', error)
+                setErrorMessage('GitHub 登录响应解析失败，请稍后重试')
+                window.localStorage.removeItem(STORAGE_KEY)
+              }
+            } else {
+              // If still no result, try polling a few more times
+              let retryCount = 0
+              const retryTimer = window.setInterval(() => {
+                const retryResult = window.localStorage.getItem(STORAGE_KEY)
+                console.log(`Retry ${retryCount + 1}: checking localStorage:`, { oauthResult: !!retryResult })
+                if (retryResult) {
+                  window.clearInterval(retryTimer)
+                  try {
+                    const decoded = JSON.parse(atob(retryResult)) as RawLoginResponse & { redirect_uri?: string | null }
+                    console.log('Processing OAuth result (retry):', { user: decoded.user?.email, hasTokens: !!decoded.tokens })
+                    applyAuthResult({ tokens: decoded.tokens, user: decoded.user }, decoded.redirect_uri ?? null)
+                    window.localStorage.removeItem(STORAGE_KEY)
+                    return
+                  } catch (error) {
+                    console.error('failed to process OAuth storage payload (retry)', error)
+                    setErrorMessage('GitHub 登录响应解析失败，请稍后重试')
+                    window.localStorage.removeItem(STORAGE_KEY)
+                  }
+                }
+                retryCount++
+                if (retryCount >= 5) {
+                  window.clearInterval(retryTimer)
+                  console.log('OAuth retry attempts exhausted')
+                  setIsGitHubLoading(false)
+                }
+              }, 200)
+            }
+            if (!oauthResult) {
+              // Don't set loading to false immediately, let the retry logic handle it
+              console.log('No OAuth result found, started retry polling')
+            }
+          }, 100)
         }
       }
-    }, 500)
+    }, 300)
 
     closeWatcherRef.current = timer
 
@@ -220,7 +290,7 @@ export function LoginForm() {
       window.clearInterval(timer)
       closeWatcherRef.current = null
     }
-  }, [isGitHubLoading])
+  }, [isGitHubLoading, applyAuthResult])
 
   const handleGitHubLogin = () => {
     setErrorMessage(null)
@@ -267,23 +337,49 @@ export function LoginForm() {
 
   useEffect(() => {
     const hash = window.location.hash
+    console.log('Checking hash on mount:', hash)
+
     if (!hash.startsWith(HASH_PREFIX)) {
       return
     }
 
+    console.log('Found OAuth hash, processing...')
     const encoded = decodeURIComponent(hash.slice(HASH_PREFIX.length))
 
     try {
-      window.localStorage.setItem(STORAGE_KEY, encoded)
-    } catch (error) {
-      console.error('failed to persist OAuth payload via storage', error)
-    } finally {
+      const decoded = JSON.parse(atob(encoded)) as RawLoginResponse & { redirect_uri?: string | null }
+      console.log('Processing OAuth result from hash:', { user: decoded.user?.email, hasTokens: !!decoded.tokens })
+
+      // Clear the hash first
       window.location.hash = ''
-      setTimeout(() => {
-        window.close()
-      }, 100)
+
+      // Always try localStorage first for hash-based auth (this is likely a popup redirect)
+      console.log('Hash-based auth detected, using localStorage mechanism')
+      try {
+        window.localStorage.setItem(STORAGE_KEY, encoded)
+        console.log('Stored OAuth data in localStorage')
+
+        // If this seems to be a popup (URL came from backend redirect), close it
+        if (window.history.length <= 2) {
+          console.log('Appears to be popup redirect, closing window')
+          setTimeout(() => {
+            window.close()
+          }, 100)
+          return
+        }
+      } catch (error) {
+        console.error('localStorage failed, processing directly', error)
+      }
+
+      // Fallback: process directly in current window
+      console.log('Processing auth in current window')
+      applyAuthResult({ tokens: decoded.tokens, user: decoded.user }, decoded.redirect_uri ?? null)
+    } catch (error) {
+      console.error('failed to process OAuth payload from hash', error)
+      setErrorMessage('GitHub 登录响应解析失败，请稍后重试')
+      window.location.hash = ''
     }
-  }, [])
+  }, [applyAuthResult])
 
   return (
     <form className="space-y-4" onSubmit={handleSubmit(onSubmit)}>
