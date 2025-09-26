@@ -2,7 +2,7 @@ CREATE TABLE IF NOT EXISTS users (
     id TEXT PRIMARY KEY,
     email TEXT NOT NULL UNIQUE,
     hashed_password TEXT NOT NULL,
-    role TEXT NOT NULL DEFAULT 'viewer',
+    role TEXT NOT NULL DEFAULT 'admin',
     status TEXT NOT NULL DEFAULT 'active',
     last_login_at TIMESTAMP,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,

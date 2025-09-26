@@ -25,18 +25,12 @@ func NewAuthHandler(service *authsvc.Service) *AuthHandler {
 
 // RegisterRoutes 注册认证相关路由。
 func (h *AuthHandler) RegisterRoutes(rg *gin.RouterGroup) {
-	rg.POST("/register", h.Register)
 	rg.POST("/login", h.Login)
 	rg.POST("/refresh", h.Refresh)
 	rg.GET("/github/login", h.GitHubLogin)
 	rg.GET("/github/callback", h.GitHubCallback)
 }
 
-type registerRequest struct {
-	Email    string `json:"email" binding:"required,email,max=255"`
-	Password string `json:"password" binding:"required,min=8,max=128"`
-	Role     string `json:"role" binding:"omitempty,oneof=admin editor viewer"`
-}
 
 type loginRequest struct {
 	Email    string `json:"email" binding:"required,email,max=255"`
@@ -47,22 +41,6 @@ type refreshRequest struct {
 	RefreshToken string `json:"refresh_token" binding:"required"`
 }
 
-// Register 创建用户。
-func (h *AuthHandler) Register(ctx *gin.Context) {
-	var req registerRequest
-	if err := ctx.ShouldBindJSON(&req); err != nil {
-		httpx.RespondError(ctx, http.StatusBadRequest, "INVALID_PAYLOAD", err.Error(), nil)
-		return
-	}
-
-	user, err := h.service.Register(ctx, req.Email, req.Password, req.Role)
-	if err != nil {
-		h.handleError(ctx, err)
-		return
-	}
-
-	httpx.RespondOK(ctx, gin.H{"user": user})
-}
 
 // Login 校验凭证并返回令牌。
 func (h *AuthHandler) Login(ctx *gin.Context) {
@@ -238,8 +216,6 @@ func (h *AuthHandler) handleError(ctx *gin.Context, err error) {
 	switch err {
 	case authsvc.ErrInvalidInput:
 		httpx.RespondError(ctx, http.StatusBadRequest, "INVALID_INPUT", err.Error(), nil)
-	case authsvc.ErrUserExists:
-		httpx.RespondError(ctx, http.StatusConflict, "USER_EXISTS", err.Error(), nil)
 	case authsvc.ErrInvalidCredentials:
 		httpx.RespondError(ctx, http.StatusUnauthorized, "INVALID_CREDENTIALS", "邮箱或密码错误", nil)
 	case authsvc.ErrUserDisabled:

@@ -101,42 +101,6 @@ func (s *Service) WithClock(now func() time.Time) {
 	}
 }
 
-// Register 创建新用户。
-func (s *Service) Register(ctx context.Context, email, password, role string) (*domain.User, error) {
-	email = normalizeEmail(email)
-	if email == "" || password == "" {
-		return nil, ErrInvalidInput
-	}
-
-	if _, err := s.repos.Users.GetByEmail(ctx, email); err == nil {
-		return nil, ErrUserExists
-	} else if !errors.Is(err, domain.ErrNotFound) {
-		return nil, err
-	}
-
-	hash, err := authutil.HashPassword(password)
-	if err != nil {
-		return nil, err
-	}
-
-	user := &domain.User{
-		ID:             uuid.NewString(),
-		Email:          email,
-		HashedPassword: hash,
-		Role:           normalizedRole(role),
-		Status:         "active",
-	}
-
-	if err := s.repos.Users.Create(ctx, user); err != nil {
-		return nil, err
-	}
-
-	created, err := s.repos.Users.GetByEmail(ctx, email)
-	if err != nil {
-		return nil, err
-	}
-	return created, nil
-}
 
 // Login 校验用户凭证并返回令牌。
 
@@ -686,7 +650,7 @@ func (s *Service) findOrCreateUserByEmail(ctx context.Context, email string) (*d
 		ID:             uuid.NewString(),
 		Email:          normalized,
 		HashedPassword: hash,
-		Role:           "viewer",
+		Role:           "admin", // Single user gets admin privileges
 		Status:         "active",
 	}
 
@@ -701,15 +665,6 @@ func (s *Service) findOrCreateUserByEmail(ctx context.Context, email string) (*d
 	return s.repos.Users.GetByEmail(ctx, normalized)
 }
 
-func normalizedRole(role string) string {
-	value := strings.TrimSpace(strings.ToLower(role))
-	switch value {
-	case "admin", "editor", "viewer":
-		return value
-	default:
-		return "viewer"
-	}
-}
 
 func normalizeResponseMode(mode string) string {
 	switch strings.TrimSpace(strings.ToLower(mode)) {

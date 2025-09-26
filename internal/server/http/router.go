@@ -76,7 +76,6 @@ func NewEngine(cfg *config.Config, logger *zap.Logger, opts RouterOptions) *gin.
 		if opts.AuthRateLimit != nil {
 			authGroup.Use(opts.AuthRateLimit)
 		}
-		authGroup.POST("/register", opts.AuthHandler.Register)
 		if opts.LoginRateLimit != nil {
 			authGroup.POST("/login", opts.LoginRateLimit, opts.AuthHandler.Login)
 			authGroup.GET("/github/login", opts.LoginRateLimit, opts.AuthHandler.GitHubLogin)
@@ -97,8 +96,8 @@ func NewEngine(cfg *config.Config, logger *zap.Logger, opts RouterOptions) *gin.
 		promptGroup.GET("/:id/versions/:versionId/diff", opts.PromptHandler.DiffPromptVersion)
 		promptGroup.GET("/:id/stats", opts.PromptHandler.GetPromptStats)
 
+		// Write operations - no role restriction in single-user mode
 		writeGroup := promptGroup.Group("")
-		writeGroup.Use(middleware.RequireRoles(middleware.RoleAdmin, middleware.RoleEditor))
 		writeGroup.POST("", opts.PromptHandler.CreatePrompt)
 		writeGroup.POST("/", opts.PromptHandler.CreatePrompt)
 		writeGroup.PUT("/:id", opts.PromptHandler.UpdatePrompt)

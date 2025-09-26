@@ -1,7 +1,7 @@
 # Prompt Manager 后端规划
 
 ## 项目愿景
-- 建立统一的 Prompt 资产库，支撑多用户团队共享与治理。
+- 建立统一的 Prompt 资产库，支撑 Prompt 管理与治理。
 - 提供版本化、可审计的 Prompt 生命周期管理，便于回溯与演进。
 - 暴露标准化 API，后续可扩展管理后台、统计大屏及多模型适配。
 
@@ -14,7 +14,7 @@
 - Prompt 模板管理：创建、查询、标签、变量 Schema 校验、版本化。
 - Prompt 版本控制：草稿/发布版、差异对比、历史追踪。
 - Prompt 执行与统计：变量渲染、执行日志、按 Prompt/版本聚合统计。
-- 用户与权限：支持多用户登录，按角色限制操作，记录审计信息。
+- 身份认证与审计：登录验证、会话管理、记录审计信息。
 - 可扩展模块（后续）：Prompt 套件组合、A/B 实验、可视化后台、模型切换策略。
 
 ## 技术栈与基础设施
@@ -102,7 +102,6 @@
 
 ## 当前可用 API
 - `GET /healthz`：返回服务状态、环境信息以及数据库/Redis 的健康详情。
-- `POST /api/v1/auth/register`：注册用户，字段 `email`、`password`、`role`（可选）。
 - `POST /api/v1/auth/login`：使用 `email + password` 登录，返回访问令牌与刷新令牌。
 - `POST /api/v1/auth/refresh`：提供刷新令牌换取新的访问/刷新令牌。
 - `POST /api/v1/prompts`：创建 Prompt，可同时提交 `name`、`description`、`tags` 与初始 `body`，若提供正文会自动生成首个版本并设为已发布，同时将内容落入 `prompts.body` 字段。
@@ -117,15 +116,13 @@
 - 其余业务 API 将在后续里程碑逐步实现。
 
 ### 认证流程说明
-1. **注册**：管理员调用 `/api/v1/auth/register` 创建用户，密码以 bcrypt 哈希存储。
-2. **登录**：用户凭凭证调用 `/api/v1/auth/login`，获得 `access_token` 与 `refresh_token`。
-3. **访问受保护资源**：将 `Authorization: Bearer <access_token>` 加入请求头，`AuthGuard` 校验令牌并在上下文注入 `user_id`、`user_role`。
-4. **权限**：写操作（创建/更新/删除 Prompt、激活版本）需要 `admin` 或 `editor` 角色，查看操作允许任意登录用户。删除操作会记录操作者信息至审计日志。
-5. **刷新令牌**：在访问令牌即将过期时，调用 `/api/v1/auth/refresh` 补发新的令牌。
-6. **统一错误格式**：所有认证相关接口返回 `code`、`message`、`details`，便于前端统一处理。
+1. **登录**：用户凭凭证调用 `/api/v1/auth/login`，获得 `access_token` 与 `refresh_token`。
+2. **访问受保护资源**：将 `Authorization: Bearer <access_token>` 加入请求头，`AuthGuard` 校验令牌并在上下文注入用户信息。
+3. **刷新令牌**：在访问令牌即将过期时，调用 `/api/v1/auth/refresh` 补发新的令牌。
+4. **统一错误格式**：所有认证相关接口返回 `code`、`message`、`details`，便于前端统一处理。
 
 ### GitHub OAuth 对接指南
-> 目标：提供 GitHub 账号单点登录能力，降低团队成员首次接入成本。后端已内置完整的 OAuth 流程，可按如下步骤启用。
+> 目标：提供 GitHub 账号登录能力，简化用户接入流程。后端已内置完整的 OAuth 流程，可按如下步骤启用。
 
 1. **创建 GitHub OAuth App**：访问 GitHub `Settings → Developer settings → OAuth Apps`，点击 `New OAuth App`。
    - 开发环境推荐配置：
@@ -137,7 +134,7 @@
    - `GET /api/v1/auth/github/login`：根据配置生成 `state` 并 302 到 GitHub 授权页，可选携带 `redirect_uri` 作为登录完成后的回跳地址。
    - 若请求参数包含 `response_mode=web_message`，回调时会返回带有 `postMessage` 的 HTML，向前端窗口发送 `{ source: 'prompt-manager', payload: { tokens, user, redirect_uri } }`，便于前端弹窗场景处理；未指定则默认返回 JSON。
    - GitHub 成功授权后回调 `GET /api/v1/auth/github/callback?code=...&state=...`，后端会校验 `state`、交换 Access Token，并返回 JSON 结构 `{ "tokens": {...}, "user": {...}, "redirect_uri": "..." }`（或在 `web_message` 模式下通过 `postMessage` 推送）。
-   - 若邮箱对应的本地账号不存在，会自动创建 `viewer` 角色的新用户并绑定 `user_identities` 映射；存在则完成绑定并更新最后登录时间。
+   - 若邮箱对应的本地账号不存在，会自动创建新用户并绑定 `user_identities` 映射；存在则完成绑定并更新最后登录时间。
 4. **安全建议**：
    - `state` 由后端使用 JWT 签名并设置有效期，无需额外存储；若需更严的幂等控制，可结合 Redis 记录已消费的 state。
    - GitHub Access Token 仅用于一次性读取用户资料，不会持久化；如需调用更多 GitHub API，请结合后台作业或密钥管控策略。
@@ -166,10 +163,10 @@ PROMPT_MANAGER_AUTH_GITHUB_STATETTL=5m
   - 第三方组织校验失败 → 返回 `403 OAUTH_ORG_FORBIDDEN`。
 
 ## 认证策略（推荐方案）
-1. **自托管用户名/密码 + JWT/Refresh Token**
+1. **用户名/密码 + JWT/Refresh Token**
    - 密码哈希使用 bcrypt/argon2，登录颁发 Access Token（短期）+ Refresh Token（长期）。
-   - Token Payload：`sub`, `user_id`, `role`, `exp`；Refresh Token 可存储于 Redis 绑定 `device_id`。
-   - Gin 中间件校验签名并注入用户上下文，Service/RBAC 层据此校验权限。
+   - Token Payload：`sub`, `user_id`, `exp`；Refresh Token 可存储于 Redis。
+   - Gin 中间件校验签名并注入用户上下文。
 2. **机器对机器访问（API Key/HMAC）**
    - 针对内部服务或第三方集成，签发 API Key，调用方通过 `X-API-KEY` 或 HMAC 头访问。
    - 后端校验 Key 的启用状态并支持速率限制、即时吊销。
@@ -209,13 +206,13 @@ PROMPT_MANAGER_AUTH_GITHUB_STATETTL=5m
 ## 开发计划与里程碑
 1. **Milestone 1：项目骨架 & 核心模型**
    - 初始化 Go module、Gin 服务、配置加载、日志/错误响应规范。
-   - 完成用户模型与基础认证（注册/登录/刷新）。
+   - 完成基础认证（登录/刷新）。
    - 完成 Prompt/PromptVersion 仓储接口与 SQLite/PG 兼容迁移。
    - ✅ 已交付：依赖容器、数据库/Redis 健康检查、请求日志、标准化响应、README 文档更新。
 2. **Milestone 2：业务能力完善**
    - Prompt CRUD、版本管理、变量 Schema 校验、渲染接口（含缓存）。
    - 执行日志写入与统计聚合表、基础统计 API + Redis 缓存。
-   - RBAC 权限校验、审计日志、API Key 管理。
+   - 审计日志。
    - ✅ **Prompt 版本控制增强（阶段一）**：
      - 已提供 Diff 接口（支持上一版本/当前激活版本比对），产出结构化差异结果。
      - 已扩展审计日志：记录 `prompt.version.created`、`prompt.version.activated` 等关键动作。
