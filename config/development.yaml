@@ -20,6 +20,16 @@ auth: # 认证与授权相关密钥
   accessTokenTTL: 180m # Access Token 有效期
   refreshTokenTTL: 720h # Refresh Token 有效期
   apiKeyHashSecret: "k5tFvoo5sfW3jfykKCxkQ8g4S46kwyUF" # API Key 哈希盐值
+  github: # GitHub OAuth 配置
+    enabled: false # 默认为关闭，如需联调请切换为 true 并填写凭据
+    clientId: "" # 本地调试用的 GitHub OAuth App Client ID
+    clientSecret: "" # GitHub OAuth App Client Secret
+    redirectUrl: "http://localhost:8080/api/v1/auth/github/callback" # 回调地址
+    scopes:
+      - read:user
+      - user:email
+    allowedOrgs: []
+    stateTTL: 5m
 seed: # 启动种子配置
   admin: # 本地初始管理员账号，可在此配置或通过环境变量覆盖
     email: "" # 默认空值，如需自动创建管理员请填写邮箱

@@ -16,6 +16,7 @@ import (
 // NewSQLRepositories 构建基于 *sql.DB 的仓储集合。
 func NewSQLRepositories(db *sql.DB, dialect database.Dialect) *domain.Repositories {
 	userRepo := &userRepository{db: db, dialect: dialect}
+	identityRepo := &userIdentityRepository{db: db, dialect: dialect}
 	promptRepo := &promptRepository{db: db, dialect: dialect}
 	promptVersionRepo := &promptVersionRepository{db: db, dialect: dialect}
 	execLogRepo := &promptExecutionLogRepository{db: db, dialect: dialect}
@@ -23,6 +24,7 @@ func NewSQLRepositories(db *sql.DB, dialect database.Dialect) *domain.Repositori
 
 	return &domain.Repositories{
 		Users:              userRepo,
+		UserIdentities:     identityRepo,
 		Prompts:            promptRepo,
 		PromptVersions:     promptVersionRepo,
 		PromptExecutionLog: execLogRepo,
@@ -64,6 +66,35 @@ VALUES (%s, %s, %s, %s, %s)`, ph.Next(), ph.Next(), ph.Next(), ph.Next(), ph.Nex
 
 	_, err := r.db.ExecContext(ctx, query, user.ID, user.Email, user.HashedPassword, role, status)
 	return err
+}
+
+func (r *userRepository) GetByID(ctx context.Context, userID string) (*domain.User, error) {
+	ph := database.NewPlaceholderBuilder(r.dialect)
+	query := fmt.Sprintf(`SELECT id, email, hashed_password, role, status, last_login_at, created_at, updated_at
+FROM users WHERE id = %s`, ph.Next())
+
+	var row userRow
+	err := r.db.QueryRowContext(ctx, query, userID).Scan(&row.id, &row.email, &row.hashedPassword, &row.role, &row.status, &row.lastLoginAt, &row.createdAt, &row.updatedAt)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, domain.ErrNotFound
+		}
+		return nil, err
+	}
+
+	user := &domain.User{
+		ID:             row.id,
+		Email:          row.email,
+		HashedPassword: row.hashedPassword,
+		Role:           row.role,
+		Status:         row.status,
+		CreatedAt:      row.createdAt,
+		UpdatedAt:      row.updatedAt,
+	}
+	if row.lastLoginAt.Valid {
+		user.LastLoginAt = &row.lastLoginAt.Time
+	}
+	return user, nil
 }
 
 func (r *userRepository) GetByEmail(ctx context.Context, email string) (*domain.User, error) {
@@ -111,6 +142,73 @@ func (r *userRepository) UpdateLastLogin(ctx context.Context, userID string) err
 		return domain.ErrNotFound
 	}
 	return nil
+}
+
+// ---- 用户身份仓储 ----
+
+type userIdentityRepository struct {
+	db      *sql.DB
+	dialect database.Dialect
+}
+
+type userIdentityRow struct {
+	id             string
+	userID         string
+	provider       string
+	providerUserID string
+	providerLogin  sql.NullString
+	avatarURL      sql.NullString
+	createdAt      time.Time
+	updatedAt      time.Time
+}
+
+func (r *userIdentityRepository) Create(ctx context.Context, identity *domain.UserIdentity) error {
+	ph := database.NewPlaceholderBuilder(r.dialect)
+	query := fmt.Sprintf(`INSERT INTO user_identities (id, user_id, provider, provider_user_id, provider_login, avatar_url)
+VALUES (%s, %s, %s, %s, %s, %s)`, ph.Next(), ph.Next(), ph.Next(), ph.Next(), ph.Next(), ph.Next())
+
+	login := sql.NullString{}
+	if identity.ProviderLogin != nil {
+		login = sql.NullString{String: *identity.ProviderLogin, Valid: true}
+	}
+	avatar := sql.NullString{}
+	if identity.AvatarURL != nil {
+		avatar = sql.NullString{String: *identity.AvatarURL, Valid: true}
+	}
+
+	_, err := r.db.ExecContext(ctx, query, identity.ID, identity.UserID, identity.Provider, identity.ProviderUserID, login, avatar)
+	return err
+}
+
+func (r *userIdentityRepository) GetByProviderAndExternalID(ctx context.Context, provider, externalID string) (*domain.UserIdentity, error) {
+	ph := database.NewPlaceholderBuilder(r.dialect)
+	query := fmt.Sprintf(`SELECT id, user_id, provider, provider_user_id, provider_login, avatar_url, created_at, updated_at
+FROM user_identities WHERE provider = %s AND provider_user_id = %s`, ph.Next(), ph.Next())
+
+	var row userIdentityRow
+	err := r.db.QueryRowContext(ctx, query, provider, externalID).Scan(&row.id, &row.userID, &row.provider, &row.providerUserID, &row.providerLogin, &row.avatarURL, &row.createdAt, &row.updatedAt)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, domain.ErrNotFound
+		}
+		return nil, err
+	}
+
+	identity := &domain.UserIdentity{
+		ID:             row.id,
+		UserID:         row.userID,
+		Provider:       row.provider,
+		ProviderUserID: row.providerUserID,
+		CreatedAt:      row.createdAt,
+		UpdatedAt:      row.updatedAt,
+	}
+	if row.providerLogin.Valid {
+		identity.ProviderLogin = &row.providerLogin.String
+	}
+	if row.avatarURL.Valid {
+		identity.AvatarURL = &row.avatarURL.String
+	}
+	return identity, nil
 }
 
 // ---- Prompt 仓储 ----
@@ -708,51 +806,51 @@ FROM prompt_versions WHERE prompt_id = %s ORDER BY version_number DESC LIMIT %s 
 
 // ListByPromptAndStatus 列出指定 Prompt 且匹配状态的版本记录。
 func (r *promptVersionRepository) ListByPromptAndStatus(ctx context.Context, promptID string, status string, limit, offset int) ([]*domain.PromptVersion, error) {
-    if limit <= 0 {
-        limit = 50
-    }
-    if offset < 0 {
-        offset = 0
-    }
-    ph := database.NewPlaceholderBuilder(r.dialect)
-    query := fmt.Sprintf(`SELECT id, prompt_id, version_number, body, variables_schema, status, metadata, created_by, created_at
+	if limit <= 0 {
+		limit = 50
+	}
+	if offset < 0 {
+		offset = 0
+	}
+	ph := database.NewPlaceholderBuilder(r.dialect)
+	query := fmt.Sprintf(`SELECT id, prompt_id, version_number, body, variables_schema, status, metadata, created_by, created_at
 FROM prompt_versions WHERE prompt_id = %s AND status = %s ORDER BY version_number DESC LIMIT %s OFFSET %s`, ph.Next(), ph.Next(), ph.Next(), ph.Next())
 
-    rows, err := r.db.QueryContext(ctx, query, promptID, status, limit, offset)
-    if err != nil {
-        return nil, err
-    }
-    defer rows.Close()
+	rows, err := r.db.QueryContext(ctx, query, promptID, status, limit, offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
 
-    var versions []*domain.PromptVersion
-    for rows.Next() {
-        var row promptVersionRow
-        if err := rows.Scan(&row.id, &row.promptID, &row.versionNumber, &row.body, &row.variablesSchema, &row.status, &row.metadata, &row.createdBy, &row.createdAt); err != nil {
-            return nil, err
-        }
-        version := &domain.PromptVersion{
-            ID:            row.id,
-            PromptID:      row.promptID,
-            VersionNumber: row.versionNumber,
-            Body:          row.body,
-            Status:        row.status,
-            CreatedAt:     row.createdAt,
-        }
-        if row.variablesSchema.Valid {
-            version.VariablesSchema = json.RawMessage(row.variablesSchema.String)
-        }
-        if row.metadata.Valid {
-            version.Metadata = json.RawMessage(row.metadata.String)
-        }
-        if row.createdBy.Valid {
-            version.CreatedBy = &row.createdBy.String
-        }
-        versions = append(versions, version)
-    }
-    if err := rows.Err(); err != nil {
-        return nil, err
-    }
-    return versions, nil
+	var versions []*domain.PromptVersion
+	for rows.Next() {
+		var row promptVersionRow
+		if err := rows.Scan(&row.id, &row.promptID, &row.versionNumber, &row.body, &row.variablesSchema, &row.status, &row.metadata, &row.createdBy, &row.createdAt); err != nil {
+			return nil, err
+		}
+		version := &domain.PromptVersion{
+			ID:            row.id,
+			PromptID:      row.promptID,
+			VersionNumber: row.versionNumber,
+			Body:          row.body,
+			Status:        row.status,
+			CreatedAt:     row.createdAt,
+		}
+		if row.variablesSchema.Valid {
+			version.VariablesSchema = json.RawMessage(row.variablesSchema.String)
+		}
+		if row.metadata.Valid {
+			version.Metadata = json.RawMessage(row.metadata.String)
+		}
+		if row.createdBy.Valid {
+			version.CreatedBy = &row.createdBy.String
+		}
+		versions = append(versions, version)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return versions, nil
 }
 
 func (r *promptVersionRepository) GetLatestVersionNumber(ctx context.Context, promptID string) (int, error) {
@@ -771,24 +869,24 @@ func (r *promptVersionRepository) GetLatestVersionNumber(ctx context.Context, pr
 
 // CountByPrompt 统计指定 Prompt 的版本总数。
 func (r *promptVersionRepository) CountByPrompt(ctx context.Context, promptID string) (int64, error) {
-    ph := database.NewPlaceholderBuilder(r.dialect)
-    query := fmt.Sprintf(`SELECT COUNT(1) FROM prompt_versions WHERE prompt_id = %s`, ph.Next())
-    var total int64
-    if err := r.db.QueryRowContext(ctx, query, promptID).Scan(&total); err != nil {
-        return 0, err
-    }
-    return total, nil
+	ph := database.NewPlaceholderBuilder(r.dialect)
+	query := fmt.Sprintf(`SELECT COUNT(1) FROM prompt_versions WHERE prompt_id = %s`, ph.Next())
+	var total int64
+	if err := r.db.QueryRowContext(ctx, query, promptID).Scan(&total); err != nil {
+		return 0, err
+	}
+	return total, nil
 }
 
 // CountByPromptAndStatus 统计指定 Prompt 在某状态下的版本总数。
 func (r *promptVersionRepository) CountByPromptAndStatus(ctx context.Context, promptID string, status string) (int64, error) {
-    ph := database.NewPlaceholderBuilder(r.dialect)
-    query := fmt.Sprintf(`SELECT COUNT(1) FROM prompt_versions WHERE prompt_id = %s AND status = %s`, ph.Next(), ph.Next())
-    var total int64
-    if err := r.db.QueryRowContext(ctx, query, promptID, status).Scan(&total); err != nil {
-        return 0, err
-    }
-    return total, nil
+	ph := database.NewPlaceholderBuilder(r.dialect)
+	query := fmt.Sprintf(`SELECT COUNT(1) FROM prompt_versions WHERE prompt_id = %s AND status = %s`, ph.Next(), ph.Next())
+	var total int64
+	if err := r.db.QueryRowContext(ctx, query, promptID, status).Scan(&total); err != nil {
+		return 0, err
+	}
+	return total, nil
 }
 
 func (r *promptVersionRepository) GetPreviousVersion(ctx context.Context, promptID string, versionNumber int) (*domain.PromptVersion, error) {

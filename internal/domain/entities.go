@@ -17,6 +17,18 @@ type User struct {
 	UpdatedAt      time.Time  `json:"updated_at"`
 }
 
+// UserIdentity 表示外部身份提供者与系统用户的绑定关系。
+type UserIdentity struct {
+	ID             string    `json:"id"`
+	UserID         string    `json:"user_id"`
+	Provider       string    `json:"provider"`
+	ProviderUserID string    `json:"provider_user_id"`
+	ProviderLogin  *string   `json:"provider_login,omitempty"`
+	AvatarURL      *string   `json:"avatar_url,omitempty"`
+	CreatedAt      time.Time `json:"created_at"`
+	UpdatedAt      time.Time `json:"updated_at"`
+}
+
 // Prompt 定义 Prompt 模板的元数据。
 type Prompt struct {
 	ID              string          `json:"id"`

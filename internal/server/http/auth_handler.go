@@ -23,21 +23,23 @@ func (h *AuthHandler) RegisterRoutes(rg *gin.RouterGroup) {
 	rg.POST("/register", h.Register)
 	rg.POST("/login", h.Login)
 	rg.POST("/refresh", h.Refresh)
+	rg.GET("/github/login", h.GitHubLogin)
+	rg.GET("/github/callback", h.GitHubCallback)
 }
 
 type registerRequest struct {
-    Email    string `json:"email" binding:"required,email,max=255"`
-    Password string `json:"password" binding:"required,min=8,max=128"`
-    Role     string `json:"role" binding:"omitempty,oneof=admin editor viewer"`
+	Email    string `json:"email" binding:"required,email,max=255"`
+	Password string `json:"password" binding:"required,min=8,max=128"`
+	Role     string `json:"role" binding:"omitempty,oneof=admin editor viewer"`
 }
 
 type loginRequest struct {
-    Email    string `json:"email" binding:"required,email,max=255"`
-    Password string `json:"password" binding:"required,min=8,max=128"`
+	Email    string `json:"email" binding:"required,email,max=255"`
+	Password string `json:"password" binding:"required,min=8,max=128"`
 }
 
 type refreshRequest struct {
-    RefreshToken string `json:"refresh_token" binding:"required"`
+	RefreshToken string `json:"refresh_token" binding:"required"`
 }
 
 // Register 创建用户。
@@ -97,6 +99,35 @@ func (h *AuthHandler) Refresh(ctx *gin.Context) {
 	})
 }
 
+// GitHubLogin 引导用户跳转至 GitHub 授权页。
+func (h *AuthHandler) GitHubLogin(ctx *gin.Context) {
+	authorizeURL, err := h.service.GitHubAuthorizeURL(ctx.Query("redirect_uri"))
+	if err != nil {
+		h.handleError(ctx, err)
+		return
+	}
+	ctx.Redirect(http.StatusFound, authorizeURL)
+}
+
+// GitHubCallback 处理 GitHub OAuth 回调并返回本地令牌。
+func (h *AuthHandler) GitHubCallback(ctx *gin.Context) {
+	tokens, user, redirectURI, err := h.service.HandleGitHubCallback(ctx.Request.Context(), ctx.Query("code"), ctx.Query("state"))
+	if err != nil {
+		h.handleError(ctx, err)
+		return
+	}
+
+	payload := gin.H{
+		"tokens": tokens,
+		"user":   user,
+	}
+	if redirectURI != "" {
+		payload["redirect_uri"] = redirectURI
+	}
+
+	httpx.RespondOK(ctx, payload)
+}
+
 func (h *AuthHandler) handleError(ctx *gin.Context, err error) {
 	switch err {
 	case authsvc.ErrInvalidInput:
@@ -109,6 +140,16 @@ func (h *AuthHandler) handleError(ctx *gin.Context, err error) {
 		httpx.RespondError(ctx, http.StatusForbidden, "USER_DISABLED", err.Error(), nil)
 	case authsvc.ErrTokenInvalid:
 		httpx.RespondError(ctx, http.StatusUnauthorized, "TOKEN_INVALID", err.Error(), nil)
+	case authsvc.ErrOAuthDisabled:
+		httpx.RespondError(ctx, http.StatusBadRequest, "OAUTH_DISABLED", err.Error(), nil)
+	case authsvc.ErrOAuthStateInvalid:
+		httpx.RespondError(ctx, http.StatusBadRequest, "OAUTH_STATE_INVALID", err.Error(), nil)
+	case authsvc.ErrOAuthExchangeFailed:
+		httpx.RespondError(ctx, http.StatusBadGateway, "OAUTH_EXCHANGE_FAILED", err.Error(), nil)
+	case authsvc.ErrOAuthEmailMissing:
+		httpx.RespondError(ctx, http.StatusBadRequest, "OAUTH_EMAIL_MISSING", err.Error(), nil)
+	case authsvc.ErrOAuthOrgUnauthorized:
+		httpx.RespondError(ctx, http.StatusForbidden, "OAUTH_ORG_FORBIDDEN", err.Error(), nil)
 	default:
 		httpx.RespondError(ctx, http.StatusInternalServerError, "INTERNAL_ERROR", err.Error(), nil)
 	}

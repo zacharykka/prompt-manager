@@ -8,8 +8,15 @@ import (
 // UserRepository 定义用户存取接口。
 type UserRepository interface {
 	Create(ctx context.Context, user *User) error
+	GetByID(ctx context.Context, userID string) (*User, error)
 	GetByEmail(ctx context.Context, email string) (*User, error)
 	UpdateLastLogin(ctx context.Context, userID string) error
+}
+
+// UserIdentityRepository 负责外部身份与本地用户的映射。
+type UserIdentityRepository interface {
+	Create(ctx context.Context, identity *UserIdentity) error
+	GetByProviderAndExternalID(ctx context.Context, provider, externalID string) (*UserIdentity, error)
 }
 
 // PromptRepository 定义 Prompt 模板存取接口。
@@ -28,17 +35,17 @@ type PromptRepository interface {
 
 // PromptVersionRepository 定义 Prompt 版本存取接口。
 type PromptVersionRepository interface {
-    Create(ctx context.Context, version *PromptVersion) error
-    GetByID(ctx context.Context, versionID string) (*PromptVersion, error)
-    ListByPrompt(ctx context.Context, promptID string, limit, offset int) ([]*PromptVersion, error)
-    // ListByPromptAndStatus 基于状态过滤版本列表（如 draft/published/archived）。
-    ListByPromptAndStatus(ctx context.Context, promptID string, status string, limit, offset int) ([]*PromptVersion, error)
-    // CountByPrompt 统计指定 Prompt 的版本总数。
-    CountByPrompt(ctx context.Context, promptID string) (int64, error)
-    // CountByPromptAndStatus 统计指定 Prompt 在某状态下的版本总数。
-    CountByPromptAndStatus(ctx context.Context, promptID string, status string) (int64, error)
-    GetLatestVersionNumber(ctx context.Context, promptID string) (int, error)
-    GetPreviousVersion(ctx context.Context, promptID string, versionNumber int) (*PromptVersion, error)
+	Create(ctx context.Context, version *PromptVersion) error
+	GetByID(ctx context.Context, versionID string) (*PromptVersion, error)
+	ListByPrompt(ctx context.Context, promptID string, limit, offset int) ([]*PromptVersion, error)
+	// ListByPromptAndStatus 基于状态过滤版本列表（如 draft/published/archived）。
+	ListByPromptAndStatus(ctx context.Context, promptID string, status string, limit, offset int) ([]*PromptVersion, error)
+	// CountByPrompt 统计指定 Prompt 的版本总数。
+	CountByPrompt(ctx context.Context, promptID string) (int64, error)
+	// CountByPromptAndStatus 统计指定 Prompt 在某状态下的版本总数。
+	CountByPromptAndStatus(ctx context.Context, promptID string, status string) (int64, error)
+	GetLatestVersionNumber(ctx context.Context, promptID string) (int, error)
+	GetPreviousVersion(ctx context.Context, promptID string, versionNumber int) (*PromptVersion, error)
 }
 
 // PromptExecutionLogRepository 定义 Prompt 执行日志接口。
@@ -57,6 +64,7 @@ type PromptAuditLogRepository interface {
 // Repositories 聚合全部仓储接口，便于依赖注入。
 type Repositories struct {
 	Users              UserRepository
+	UserIdentities     UserIdentityRepository
 	Prompts            PromptRepository
 	PromptVersions     PromptVersionRepository
 	PromptExecutionLog PromptExecutionLogRepository

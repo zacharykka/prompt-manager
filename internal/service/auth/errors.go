@@ -13,4 +13,14 @@ var (
 	ErrUserDisabled = errors.New("user disabled")
 	// ErrTokenInvalid 刷新令牌无效。
 	ErrTokenInvalid = errors.New("token invalid")
+	// ErrOAuthDisabled 未开启指定 OAuth 流程。
+	ErrOAuthDisabled = errors.New("oauth disabled")
+	// ErrOAuthStateInvalid OAuth state 校验失败。
+	ErrOAuthStateInvalid = errors.New("oauth state invalid")
+	// ErrOAuthExchangeFailed OAuth 交换 access token 失败。
+	ErrOAuthExchangeFailed = errors.New("oauth exchange failed")
+	// ErrOAuthEmailMissing 无法获取有效的邮箱信息。
+	ErrOAuthEmailMissing = errors.New("oauth email missing")
+	// ErrOAuthOrgUnauthorized 用户不属于允许的组织。
+	ErrOAuthOrgUnauthorized = errors.New("oauth organization not allowed")
 )

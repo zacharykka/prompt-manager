@@ -9,9 +9,10 @@ import (
 
 // Claims 定义标准化的访问令牌载荷。
 type Claims struct {
-	UserID    string `json:"user_id"`
-	Role      string `json:"role"`
-	TokenType string `json:"token_type"`
+	UserID    string            `json:"user_id"`
+	Role      string            `json:"role"`
+	TokenType string            `json:"token_type"`
+	Metadata  map[string]string `json:"metadata,omitempty"`
 	jwt.RegisteredClaims
 }
 

@@ -124,6 +124,46 @@
 5. **刷新令牌**：在访问令牌即将过期时，调用 `/api/v1/auth/refresh` 补发新的令牌。
 6. **统一错误格式**：所有认证相关接口返回 `code`、`message`、`details`，便于前端统一处理。
 
+### GitHub OAuth 对接指南
+> 目标：提供 GitHub 账号单点登录能力，降低团队成员首次接入成本。后端已内置完整的 OAuth 流程，可按如下步骤启用。
+
+1. **创建 GitHub OAuth App**：访问 GitHub `Settings → Developer settings → OAuth Apps`，点击 `New OAuth App`。
+   - 开发环境推荐配置：
+     - `Homepage URL`: `http://localhost:8080`
+     - `Authorization callback URL`: `http://localhost:8080/api/v1/auth/github/callback`
+   - 生产环境需替换为公网域名并确保 HTTPS；可在 `config/production.yaml` 中调整回调地址。
+2. **Scopes 选择**：首版仅需 `read:user` 与 `user:email`，用于读取基础资料与邮箱；如需团队/组织信息，可追加 `read:org`。
+3. **后端流程约定**：
+   - `GET /api/v1/auth/github/login`：根据配置生成 `state` 并 302 到 GitHub 授权页，可选携带 `redirect_uri` 作为登录完成后的回跳地址。
+   - GitHub 成功授权后回调 `GET /api/v1/auth/github/callback?code=...&state=...`，后端会校验 `state`、交换 Access Token，并返回 JSON 结构 `{ "tokens": {...}, "user": {...}, "redirect_uri": "..." }`。
+   - 若邮箱对应的本地账号不存在，会自动创建 `viewer` 角色的新用户并绑定 `user_identities` 映射；存在则完成绑定并更新最后登录时间。
+4. **安全建议**：
+   - `state` 由后端使用 JWT 签名并设置有效期，无需额外存储；若需更严的幂等控制，可结合 Redis 记录已消费的 state。
+   - GitHub Access Token 仅用于一次性读取用户资料，不会持久化；如需调用更多 GitHub API，请结合后台作业或密钥管控策略。
+   - 推荐在审计日志中记录第三方登录事件（含 `login`、`id`、`email`），并结合限流策略保护 `/github/login` 接口。
+
+#### 环境变量配置
+在 `.env` 或部署环境中新增以下变量，对应 `auth.github` 配置项：
+```dotenv
+PROMPT_MANAGER_AUTH_GITHUB_ENABLED=false
+PROMPT_MANAGER_AUTH_GITHUB_CLIENTID="xxxx"
+PROMPT_MANAGER_AUTH_GITHUB_CLIENTSECRET="xxxx"
+PROMPT_MANAGER_AUTH_GITHUB_REDIRECTURL="http://localhost:8080/api/v1/auth/github/callback"
+PROMPT_MANAGER_AUTH_GITHUB_SCOPES="read:user,user:email"
+PROMPT_MANAGER_AUTH_GITHUB_ALLOWEDORGS="your-org-1,your-org-2"
+PROMPT_MANAGER_AUTH_GITHUB_STATETTL=5m
+```
+- 需在生产环境通过安全渠道注入 `CLIENTSECRET` 等敏感配置。
+- 若需要额外 Scopes，请在 `SCOPES` 中使用逗号分隔，并同步更新 GitHub 应用设置。
+
+#### 调试与回归清单
+- 本地模拟：`make run` 后访问 `http://localhost:8080/api/v1/auth/github/login`，确认 302 到 GitHub 授权页。
+- 回调验证：使用测试账号完成授权后，应收到 JSON 响应并返回 `tokens`、`user` 信息；如传入 `redirect_uri` 会在响应中回显，供前端自行跳转。
+- 失败场景：
+  - `state` 无法解析或过期 → 返回 `400 OAUTH_STATE_INVALID`。
+  - GitHub 未返回邮箱 → 返回 `400 OAUTH_EMAIL_MISSING`，需提示用户公开邮箱或在应用内补录。
+  - 第三方组织校验失败 → 返回 `403 OAUTH_ORG_FORBIDDEN`。
+
 ## 认证策略（推荐方案）
 1. **自托管用户名/密码 + JWT/Refresh Token**
    - 密码哈希使用 bcrypt/argon2，登录颁发 Access Token（短期）+ Refresh Token（长期）。

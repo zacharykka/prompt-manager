@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -86,11 +87,23 @@ type RedisConfig struct {
 
 // AuthConfig 管理 JWT 与 API Key 等认证参数。
 type AuthConfig struct {
-	AccessTokenSecret  string        `mapstructure:"accessTokenSecret"`
-	RefreshTokenSecret string        `mapstructure:"refreshTokenSecret"`
-	AccessTokenTTL     time.Duration `mapstructure:"accessTokenTTL"`
-	RefreshTokenTTL    time.Duration `mapstructure:"refreshTokenTTL"`
-	APIKeyHashSecret   string        `mapstructure:"apiKeyHashSecret"`
+	AccessTokenSecret  string            `mapstructure:"accessTokenSecret"`
+	RefreshTokenSecret string            `mapstructure:"refreshTokenSecret"`
+	AccessTokenTTL     time.Duration     `mapstructure:"accessTokenTTL"`
+	RefreshTokenTTL    time.Duration     `mapstructure:"refreshTokenTTL"`
+	APIKeyHashSecret   string            `mapstructure:"apiKeyHashSecret"`
+	GitHub             GitHubOAuthConfig `mapstructure:"github"`
+}
+
+// GitHubOAuthConfig 描述 GitHub OAuth 所需参数。
+type GitHubOAuthConfig struct {
+	Enabled      bool          `mapstructure:"enabled"`
+	ClientID     string        `mapstructure:"clientId"`
+	ClientSecret string        `mapstructure:"clientSecret"`
+	RedirectURL  string        `mapstructure:"redirectUrl"`
+	Scopes       []string      `mapstructure:"scopes"`
+	AllowedOrgs  []string      `mapstructure:"allowedOrgs"`
+	StateTTL     time.Duration `mapstructure:"stateTTL"`
 }
 
 // LoggingConfig 控制日志输出级别等行为。
@@ -236,6 +249,15 @@ func applyDefaults(cfg *Config, env string) {
 	if cfg.Redis.PoolSize == 0 {
 		cfg.Redis.PoolSize = 10
 	}
+	if cfg.Auth.GitHub.StateTTL <= 0 {
+		cfg.Auth.GitHub.StateTTL = 5 * time.Minute
+	}
+	if len(cfg.Auth.GitHub.Scopes) == 0 {
+		cfg.Auth.GitHub.Scopes = []string{"read:user", "user:email"}
+	}
+	if cfg.Auth.GitHub.RedirectURL == "" {
+		cfg.Auth.GitHub.RedirectURL = "http://localhost:8080/api/v1/auth/github/callback"
+	}
 	if cfg.Logging.Level == "" {
 		cfg.Logging.Level = "info"
 	}
@@ -257,6 +279,9 @@ func validateConfig(cfg *Config) error {
 	if err := validateSecurityHeaders(cfg.Server.SecurityHeaders); err != nil {
 		return err
 	}
+	if err := validateGitHubOAuthConfig(cfg.Auth.GitHub); err != nil {
+		return err
+	}
 	if err := validateSeedConfig(cfg.Seed); err != nil {
 		return err
 	}
@@ -270,6 +295,39 @@ func validateSecret(field, secret string) error {
 	}
 	if strings.Contains(strings.ToLower(clean), "change-me") {
 		return fmt.Errorf("config %s must not use default placeholder", field)
+	}
+	return nil
+}
+
+func validateGitHubOAuthConfig(oauth GitHubOAuthConfig) error {
+	if !oauth.Enabled {
+		return nil
+	}
+	if strings.TrimSpace(oauth.ClientID) == "" {
+		return fmt.Errorf("config auth.github.clientId is required when GitHub OAuth is enabled")
+	}
+	if strings.TrimSpace(oauth.ClientSecret) == "" {
+		return fmt.Errorf("config auth.github.clientSecret is required when GitHub OAuth is enabled")
+	}
+	redirect := strings.TrimSpace(oauth.RedirectURL)
+	if redirect == "" {
+		return fmt.Errorf("config auth.github.redirectUrl is required when GitHub OAuth is enabled")
+	}
+	if _, err := url.ParseRequestURI(redirect); err != nil {
+		return fmt.Errorf("config auth.github.redirectUrl invalid: %w", err)
+	}
+	for _, scope := range oauth.Scopes {
+		if strings.TrimSpace(scope) == "" {
+			return fmt.Errorf("config auth.github.scopes contains empty entry")
+		}
+	}
+	for _, org := range oauth.AllowedOrgs {
+		if strings.TrimSpace(org) == "" {
+			return fmt.Errorf("config auth.github.allowedOrgs contains empty entry")
+		}
+	}
+	if oauth.StateTTL <= 0 {
+		return fmt.Errorf("config auth.github.stateTTL must be positive")
 	}
 	return nil
 }

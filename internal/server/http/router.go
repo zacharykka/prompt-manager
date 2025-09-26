@@ -79,10 +79,13 @@ func NewEngine(cfg *config.Config, logger *zap.Logger, opts RouterOptions) *gin.
 		authGroup.POST("/register", opts.AuthHandler.Register)
 		if opts.LoginRateLimit != nil {
 			authGroup.POST("/login", opts.LoginRateLimit, opts.AuthHandler.Login)
+			authGroup.GET("/github/login", opts.LoginRateLimit, opts.AuthHandler.GitHubLogin)
 		} else {
 			authGroup.POST("/login", opts.AuthHandler.Login)
+			authGroup.GET("/github/login", opts.AuthHandler.GitHubLogin)
 		}
 		authGroup.POST("/refresh", opts.AuthHandler.Refresh)
+		authGroup.GET("/github/callback", opts.AuthHandler.GitHubCallback)
 	}
 	if opts.PromptHandler != nil {
 		promptGroup := api.Group("/prompts")
