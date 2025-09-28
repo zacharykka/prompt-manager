@@ -70,15 +70,17 @@
    cp .env.example .env
    ```
    根据需要修改访问令牌密钥、数据库口令等敏感信息。
-2. 构建并启动服务（包含 PostgreSQL、Redis 与自动迁移）：
+2. 构建并启动服务（Go 后端、React 前端、PostgreSQL、Redis 以及自动迁移）：
    ```bash
    docker compose up --build
    ```
-   首次启动时 `migrate` 服务会自动运行数据库迁移并退出，随后 `app` 服务将依赖已完成的迁移继续启动。
+   首次启动时 `migrate` 服务会自动运行数据库迁移并退出，随后 `app` 与 `frontend` 服务将在迁移成功后分别启动。
 3. 验证服务：
+   - Web UI: `http://localhost:3000`（Nginx 提供静态资源，`/api` 自动代理至后端）
    - API: `http://localhost:8080/healthz`
    - PostgreSQL: `localhost:5432`
    - Redis: `localhost:6379`
+   如需自定义前端调用地址，可在 `.env` 中设置 `VITE_API_BASE_URL`，默认值为 `/api/v1`。
 4. 更新数据库结构时，可单独执行：
    ```bash
    docker compose run --rm migrate up
@@ -89,6 +91,16 @@
    docker compose down
    ```
    若需要清理数据卷，追加 `-v` 参数。
+
+### SQLite 轻量部署（可选）
+如需省略 PostgreSQL，可使用随仓库提供的 SQLite 版本编排：
+```bash
+docker compose -f docker-compose.sqlite.yaml up --build
+```
+该文件会：
+- 将宿主机 `./data` 目录挂载到容器内 `/app/data`，使用 `data/dev.db` 作为 SQLite 文件；
+- 通过 `migrate` 容器自动执行迁移，初始化数据库结构；
+- 保留 Redis 以支持缓存/限流，如暂不需要可在 compose 文件中移除 `redis` 服务。
 
 ## 运行时依赖与初始化
 - **数据库**：开发模式使用 `./data/dev.db`（自动创建）；生产模式需配置 PostgreSQL DSN，并调整连接池参数。
